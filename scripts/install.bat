@@ -6,7 +6,6 @@ rem  Tuy chon:  install.bat 1          -> muc bao ve 1
 rem             install.bat 2 Kid      -> muc 2, tai khoan con la "Kid"
 rem ============================================================================
 setlocal EnableDelayedExpansion
-chcp 65001 >nul
 
 set "LEVEL=2"
 set "CHILD="
