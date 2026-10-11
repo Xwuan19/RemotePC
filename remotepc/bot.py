@@ -676,7 +676,11 @@ class Agent:
             self.store.save()
             self.store.log(action, ok=ok, delay=delay, detail=detail, reason=kw.get("reason", ""))
             if ok and self.cfg.notify.on_shutdown:
-                self.notify(M.shutdown_report(reason=kw.get("reason") or "lệnh từ xa",
+                act_name = "Khởi động lại" if action == "restart" else "Tắt máy"
+                reason_desc = f"Lệnh {act_name.lower()} từ xa"
+                if msg:
+                    reason_desc += f" · Lời nhắn: “{msg}”"
+                self.notify(M.shutdown_report(reason=reason_desc,
                                               hostname=system_info.collect(with_public_ip=False).hostname,
                                               at=f"{datetime.now():%H:%M:%S} (+{delay}s)"))
             return ok
