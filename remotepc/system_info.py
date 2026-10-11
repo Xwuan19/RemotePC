@@ -527,12 +527,13 @@ def format_shutdown_reason(raw: str) -> str:
         return raw[:300]
 
     action_vn = "Khởi động lại" if "restart" in stype else "Tắt máy"
+    user_name = user.split("\\")[-1] if user else ""
     if "system" in user.lower():
         actor = "Lệnh từ xa (Bot Telegram)"
     elif "explorer" in proc.lower():
-        actor = f"Người dùng bấm trực tiếp ({user.split('\\')[-1]})"
+        actor = f"Người dùng bấm trực tiếp ({user_name})"
     else:
-        actor = user.split("\\")[-1] or user
+        actor = user_name or user
 
     parts = [f"{action_vn} bởi: *{actor}*"]
     if comment and comment.lower() != "no title for this reason could be found":
