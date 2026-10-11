@@ -44,14 +44,14 @@ def make_bar(pct: float, length: int = 10) -> str:
 def boot_report(**kw) -> str:
     return (
         f"🖥 *Remote PC* • `{kw.get('hostname','?')}` (`{kw.get('tag','pc1')}`)\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"🟢 *Trạng thái:* _Máy vừa được bật_\n"
         f"👤 *Người dùng:* `{kw.get('user','?')}`\n"
         f"🕒 *Giờ bật:* `{kw.get('boot_time','?')}`\n"
         f"🌐 *IP LAN:* `{kw.get('lan_ip','?')}`\n"
         f"🌍 *IP công khai:* `{kw.get('public_ip','?')}`\n"
         f"💻 *Windows:* `{kw.get('os','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"🛡️ _Agent đang chạy ngầm và đã tự bảo vệ._"
     )
 
@@ -59,7 +59,7 @@ def boot_report(**kw) -> str:
 def login_report(**kw) -> str:
     return (
         f"👤 *Có người đăng nhập* • `{kw.get('hostname','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"Tài khoản: `{kw.get('user','?')}` · Lúc: `{kw.get('at','?')}`"
     )
 
@@ -67,10 +67,10 @@ def login_report(**kw) -> str:
 def shutdown_report(**kw) -> str:
     return (
         f"{EMOJI['shutdown']} *Máy đang tắt (offline)* • `{kw.get('hostname','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Lý do: _{kw.get('reason','không rõ')}_\n"
+        f"─────────────\n"
+        f"Lý do: {kw.get('reason','không rõ')}\n"
         f"Thời gian: `{kw.get('at','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"⚠️ _Máy đã tắt. Mọi lệnh điều khiển tạm dừng cho đến khi nó bật lại._"
     )
 
@@ -85,10 +85,10 @@ def heartbeat(**kw) -> str:
 def tamper_alert(**kw) -> str:
     return (
         f"{EMOJI['tamper']} *Cảnh báo can thiệp* • `{kw.get('hostname','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"Sự kiện: {kw.get('event','?')}\n"
         f"Chi tiết: `{kw.get('detail','')}` · Lúc: `{kw.get('at','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"🛡️ _Agent đã tự khôi phục an toàn._"
     )
 
@@ -103,7 +103,7 @@ def curfew_warn(**kw) -> str:
     end = kw.get("end", "?")
     return (
         f"{EMOJI['warn']} *Sắp tới giờ giới nghiêm* • `{kw.get('hostname','?')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"─────────────\n"
         f"Nó còn *{mins} phút* trước {end}.\n"
         f"Đang mở: `{kw.get('app','?')}` · Lúc: `{kw.get('at','?')}`"
     )
