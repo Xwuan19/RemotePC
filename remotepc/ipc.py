@@ -81,18 +81,23 @@ def _atomic_write(path: Path, obj: dict) -> bool:
     tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-        return True
+        content = json.dumps(obj, ensure_ascii=False)
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+            return True
+        except OSError:
+            path.write_text(content, encoding="utf-8")
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return True
     except OSError as e:
         log.debug("Ghi %s that bai: %s", path, e)
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
         return False
 
 

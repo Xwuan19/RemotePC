@@ -335,7 +335,7 @@ def _apply_acls(cfg: Config, layout: Layout, install_root: Path, children: list[
 
     # Go bo cac quyen DENY cu tren nhom Users neu da tung bi cai dat loi truoc do
     for target in (layout.base, layout.ipc_dir, layout.outbox_dir, layout.inbox_dir, layout.shots_dir):
-        run(["icacls", str(target), "/remove:d", "*S-1-5-32-545"])
+        run(["icacls", str(target), "/remove:d", "*S-1-5-32-545", "/t", "/c"])
 
     # 1) Thu muc du lieu (layout.base):
     # Chi SYSTEM + Administrators giu toan quyen. Users bi loai khoi DACL (/inheritance:r).
@@ -346,20 +346,16 @@ def _apply_acls(cfg: Config, layout: Layout, install_root: Path, children: list[
             run(["icacls", str(layout.base), "/deny", f"{acct}:(OI)(CI)(R,W,D,RX)"])
     notes.append(f"Đã khoá {layout.base} (chỉ SYSTEM và Administrators)")
 
-    # 2) ipc: cho phep Users vao ipc/ de den outbox va inbox
+    # 2) ipc: cho phep Users vao ipc/, doc outbox va ghi/sua inbox, shots
     run(["icacls", str(layout.ipc_dir), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
-    for sub, grants, denies in (
-        (layout.outbox_dir, ["*S-1-5-32-545:(OI)(CI)(RX)"], []),
-        (layout.inbox_dir, ["*S-1-5-32-545:(OI)(CI)(W,WD,AD,WA)"], ["*S-1-5-32-545:(OI)(CI)(R,D)"]),
-        (layout.shots_dir, ["*S-1-5-32-545:(OI)(CI)(W,WD,AD,WA)"], ["*S-1-5-32-545:(OI)(CI)(R,D)"]),
-    ):
+    run(["icacls", str(layout.outbox_dir), "/inheritance:r",
+         "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)",
+         "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
+    for sub in (layout.inbox_dir, layout.shots_dir):
         run(["icacls", str(sub), "/inheritance:r",
-             "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
-        for g in grants:
-            run(["icacls", str(sub), "/grant", g])
-        for d in denies:
-            run(["icacls", str(sub), "/deny", d])
-    notes.append("Đã phân quyền ipc/ (outbox: chỉ đọc · inbox, shots: chỉ ghi)")
+             "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)",
+             "/grant", "*S-1-5-32-545:(OI)(CI)(M)"])
+    notes.append("Đã phân quyền ipc/ (outbox: chỉ đọc · inbox, shots: ghi/sửa)")
 
     # 3) Thu muc chuong trinh:
     run(["icacls", str(install_root), "/inheritance:r",

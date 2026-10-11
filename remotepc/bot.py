@@ -843,6 +843,11 @@ class Agent:
 
     def h_pin(self, cmd: ParsedCommand, upd: Update) -> str:
         args = [a for a in cmd.args if a]
+        if cmd.command == "pin" and len(args) == 1 and self.cfg.has_pin() and self.cfg.check_pin(args[0]):
+            until = time.time() + PIN_SESSION_MINUTES * 60
+            self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = until
+            self.store.save()
+            return M.cmd_ok("UNLOCK", f"Mã PIN chính xác! Đã mở khoá {PIN_SESSION_MINUTES} phút cho chat này.")
         if cmd.command == "pin" and len(args) >= 1:
             old, new = (args + [""])[:2]
             if not self.cfg.has_pin():
@@ -850,7 +855,7 @@ class Agent:
             elif not self.cfg.check_pin(old):
                 return M.cmd_fail("PIN", "Mã PIN cũ không đúng.")
             if len(new) < 4:
-                return M.cmd_fail("PIN", "PIN mới phải có ít nhất 4 ký tự.")
+                return M.cmd_fail("PIN", "Cú pháp: `/pin <mã_cũ> <mã_mới>` (PIN mới cần ít nhất 4 ký tự).\nHoặc nếu muốn mở khoá: `/unlock <mã>`.")
             self.cfg.set_pin(new)
             save_config(self.cfg, self.cfg_path)
             self.store.log("pin_changed", chat=upd.chat_id)

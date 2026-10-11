@@ -58,9 +58,18 @@ class UIHost:
     def _write_inbox(self, name: str, payload: dict) -> None:
         try:
             self.inbox.mkdir(parents=True, exist_ok=True)
+            target = self.inbox / name
+            content = json.dumps(payload, ensure_ascii=False)
             tmp = self.inbox / f".{name}.{self.pid}.tmp"
-            tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            os.replace(tmp, self.inbox / name)
+            try:
+                tmp.write_text(content, encoding="utf-8")
+                os.replace(tmp, target)
+            except OSError:
+                target.write_text(content, encoding="utf-8")
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
         except OSError as e:
             log.debug("ghi %s that bai: %s", name, e)
 

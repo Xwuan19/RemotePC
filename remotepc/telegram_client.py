@@ -65,7 +65,7 @@ class Update:
                 message_id=int(msg.get("message_id") or 0),
                 from_id=int(sender.get("id") or 0),
                 from_name=name or str(sender.get("username") or ""),
-                date=int(msg.get("date") or time.time()),
+                date=int(time.time()),
                 raw=data,
             )
         msg = data.get("message") or data.get("edited_message") or data.get("channel_post")
@@ -245,7 +245,8 @@ class TelegramClient:
         if not callback_query_id:
             return False
         try:
-            self._call("answerCallbackQuery", {"callback_query_id": callback_query_id, "text": text})
+            self.call("answerCallbackQuery", attempts=1, callback_query_id=callback_query_id,
+                      text=text or None)
             return True
         except Exception:
             return False
