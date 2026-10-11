@@ -41,8 +41,22 @@ from remotepc.paths import IS_WINDOWS
 SELFTEST_TASK_FOLDER = "RemotePCSelfTest"
 NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 
+# scripts\test.bat chay test theo 2 buoc: buoc 1 la toan bo test don vi, buoc 2
+# la rieng file nay (verbose). Neu buoc 1 cung chay file nay thi hop thoai va
+# anh chup man hinh se nhay len HAI lan, va so lieu tong ket bi dem trung.
+# Vi vay buoc 1 dat REMOTEPC_SKIP_LIVE=1 de file nay tu bo qua.
+_LIVE_DISABLED = os.environ.get("REMOTEPC_SKIP_LIVE") == "1"
+
+if not IS_WINDOWS:
+    _LIVE_SKIP_REASON = "chi chay tren Windows (may dev Linux/macOS bo qua)"
+elif _LIVE_DISABLED:
+    _LIVE_SKIP_REASON = ("hoan lai buoc test song: buoc test don vi dang dat "
+                         "REMOTEPC_SKIP_LIVE=1 de khoi nhay hop thoai 2 lan")
+else:
+    _LIVE_SKIP_REASON = ""
+
 requires_windows = unittest.skipUnless(
-    IS_WINDOWS, "chi chay tren Windows (may dev Linux/macOS bo qua)")
+    IS_WINDOWS and not _LIVE_DISABLED, _LIVE_SKIP_REASON)
 
 
 def _whoami() -> str:

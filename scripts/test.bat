@@ -1,15 +1,15 @@
 @echo off
 rem ============================================================================
-rem  RemotePC - KIEM TRA TỰ ĐỘNG TRÊN WINDOWS (một lệnh duy nhất)
+rem  RemotePC - KIEM TRA TU DONG TREN WINDOWS (mot lenh duy nhat)
 rem
 rem  Cach dung:  scripts\test.bat
 rem              scripts\test.bat -SkipLive     (bo qua phan goi Win32 that)
 rem              scripts\test.bat -Policy       (them test ghi policy HKCU)
 rem
-rem  File nay tu xin quyen Administrator vi nhieu test can no:
-rem    - gan DENY ACE de chung minh con khong End Task duoc
-rem    - schtasks /create de chung minh Task Scheduler chap nhan XML cua tool
-rem  Neu ban tu choi UAC, script van chay nhung cac test do se SKIP.
+rem  CHAY DUOC CA HAI CACH:
+rem    - Nguoi dung click doi  -> tu xin quyen Admin (UAC), giu cua so lai de doc
+rem    - AI agent / tu shell   -> chay tai cho, khong popup, khong pause,
+rem                               output bat duoc binh thuong
 rem
 rem  Script KHONG tat may, KHONG cai dat, KHONG sua gi ngoai thu muc tam.
 rem ============================================================================
@@ -18,28 +18,38 @@ chcp 65001 >nul
 
 set "HERE=%~dp0"
 set "REPO=%HERE%.."
+cd /d "%REPO%"
+
+rem ---------- Heu: co phai duoc chay bang cach CLICK DOI file nay khong? ----------
+rem Khi click doi, Windows goi: cmd /c ""...\test.bat" "
+rem Khi chay tu shell/agent thi %CMDLINE% khong chua duong dan cua chinh no.
+set "INTERACTIVE=0"
+echo %CMDLINE% | find /i "%~nx0" >nul 2>&1 && set "INTERACTIVE=1"
 
 rem ---------- Da co quyen Admin chua? ----------
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :run
 
 echo.
-echo   Dang yeu cau quyen Administrator de kiem tra day du...
-echo   (Neu ban bam "No", script van chay nhung nhieu test se bi SKIP.)
+echo   [!] Dang chay KHONG co quyen Administrator.
+echo       Cac test ve chan End Task / schtasks / ACL se bi SKIP.
 echo.
 
-rem Tu nang quyen: goi lai chinh file nay trong mot cua so Administrator
-set "ARGS=%*"
-powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%ARGS%' -Verb RunAs" >nul 2>&1
+if "%INTERACTIVE%"=="0" goto :run
+
+rem Chi tu nang quyen khi nguoi that click doi. Agent thi bo qua buoc nay vi
+rem UAC can nguoi bam, va cua so moi se lam agent khong bat duoc output.
+echo   Dang yeu cau quyen Administrator...
+echo   (Bam "No" thi script van chay tiep voi quyen hien tai.)
+echo.
+powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Khong nang duoc quyen. Chay tiep voi quyen hien tai...
+    echo   Khong nang duoc quyen - chay tiep voi quyen hien tai.
     goto :run
 )
 exit /b 0
 
 :run
-cd /d "%REPO%"
-
 powershell -NoProfile -ExecutionPolicy Bypass -File "%HERE%test.ps1" %*
 set "RC=%errorlevel%"
 
@@ -52,8 +62,7 @@ if "%RC%"=="0" (
     echo   Bao cao chi tiet: "%REPO%\test-report.txt"
 )
 echo --------------------------------------------------------------------------
-echo.
 
-rem Neu dang o cua so UAC tu nang quyen thi giu lai de nguoi dung doc ket qua
-if not "%RP_NO_PAUSE%"=="1" pause
+rem Chi pause khi nguoi that click doi - neu khong, AI agent se treo o day.
+if "%INTERACTIVE%"=="1" pause
 exit /b %RC%
