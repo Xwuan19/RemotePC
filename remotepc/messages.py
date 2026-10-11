@@ -58,9 +58,12 @@ def login_report(**kw) -> str:
 
 def shutdown_report(**kw) -> str:
     return (
-        f"{EMOJI['shutdown']} *MÁY ĐANG TẮT*\n"
+        f"{EMOJI['shutdown']} *MÁY ĐANG TẮT (OFFLINE)*\n"
+        f"────────────────\n"
         f"Lý do: {kw.get('reason','(không rõ)')}\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`"
+        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`\n"
+        f"────────────────\n"
+        f"⚠️ Máy đã tắt. Mọi lệnh điều khiển tạm dừng cho đến khi con bật máy lại."
     )
 
 

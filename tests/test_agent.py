@@ -163,6 +163,15 @@ class TestPin(AgentTestCase):
         self.assertIn("RESTART", out)
         self.assertTrue(self.power_calls)
 
+    def test_stale_command_is_ignored(self):
+        self.send("/unlock 1234")
+        before_calls = len(self.power_calls)
+        upd = Update(update_id=99, chat_id=111, text="/shutdown 60", date=int(time.time() - 3600))
+        self.agent._handle_update(upd)
+        self.assertIn("BỎ QUA", self.tg.last)
+        self.assertEqual(len(self.power_calls), before_calls)
+
+
     def test_unlock_wrong_pin(self):
         out = self.send("/unlock 0000")
         self.assertIn("Sai mã PIN", out)
