@@ -64,6 +64,21 @@ BOT_COMMAND_MENU = [
 ]
 
 
+def make_status_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📊 Trạng thái", "callback_data": "/status"},
+                {"text": "📸 Chụp màn hình", "callback_data": "/screenshot"},
+            ],
+            [
+                {"text": "🔒 Khoá máy", "callback_data": "/lock"},
+                {"text": "🔴 Tắt máy (60s)", "callback_data": "/shutdown 60"},
+            ]
+        ]
+    }
+
+
 class Agent:
     """Toan bo vong doi cua agent tren 1 may."""
 
@@ -94,6 +109,7 @@ class Agent:
         self._last_protect = 0.0
         self._uihost_fail = 0
         self._threads: list[threading.Thread] = []
+        self._session_start_time = time.time()
         self._load_offset()
 
     # ================================================================== #
@@ -176,7 +192,7 @@ class Agent:
     # ================================================================== #
 
     def notify(self, text: str, kind: str = "", photo: Optional[bytes] = None,
-                silent: bool = False) -> bool:
+                silent: bool = False, reply_markup: Optional[dict] = None) -> bool:
         """Gui ve tat ca chat duoc cap phep."""
         if not text:
             return False
@@ -187,6 +203,8 @@ class Agent:
         if not chats:
             log.info("[khong co chat_id] %s: %s", kind, text.replace("\n", " | ")[:160])
             return False
+        if reply_markup is None and kind in ("boot", "curfew_warn", "curfew_start"):
+            reply_markup = make_status_keyboard()
         ok_any = False
         for chat_id in chats:
             try:
@@ -194,7 +212,8 @@ class Agent:
                     self.tg.send_photo(chat_id, photo, caption=text[:1000],
                                        filename=f"{self.cfg.machine_tag}.png", silent=silent)
                 else:
-                    self.tg.send_message(chat_id, text, parse_mode="Markdown", silent=silent)
+                    self.tg.send_message(chat_id, text, parse_mode="Markdown", silent=silent,
+                                         reply_markup=reply_markup)
                 ok_any = True
             except TelegramError as e:
                 log.error("Gui toi %s that bai: %s", chat_id, e)
@@ -204,16 +223,18 @@ class Agent:
             self.store.log("notify", kind=kind, chars=len(text), delivered=ok_any)
         return ok_any
 
-    def reply(self, upd: Update, text: str, silent: Optional[bool] = None) -> None:
+    def reply(self, upd: Update, text: str, silent: Optional[bool] = None,
+              reply_markup: Optional[dict] = None) -> None:
         if not text or not self.tg:
             return
         try:
             self.tg.send_message(upd.chat_id, text, parse_mode="Markdown",
-                                 silent=self.cfg.telegram.silent_replies if silent is None else silent)
+                                 silent=self.cfg.telegram.silent_replies if silent is None else silent,
+                                 reply_markup=reply_markup)
         except TelegramError as e:
             log.error("reply that bai: %s", e)
             try:
-                self.tg.send_message(upd.chat_id, text[:4000])
+                self.tg.send_message(upd.chat_id, text[:4000], reply_markup=reply_markup)
             except TelegramError:
                 pass
 
@@ -250,6 +271,10 @@ class Agent:
                     self._offset = max(self._offset, upd.update_id + 1)
                     self._save_offset()
                     try:
+                        if upd.raw.get("callback_query"):
+                            cb_id = upd.raw["callback_query"].get("id")
+                            if cb_id and hasattr(self.tg, "answer_callback_query"):
+                                self.tg.answer_callback_query(cb_id)
                         self._handle_update(upd)
                     except Exception:
                         log.exception("Xu ly update loi")
@@ -298,6 +323,19 @@ class Agent:
             self.reply(upd, cmd.error or M.unknown_command(cmd.command))
             return
 
+        # ---- kiem tra tuoi cua lenh (chong thuc thi lenh cu khi may vua bat lai) ----
+        now = time.time()
+        age = now - upd.date if upd.date else 0
+        is_stale = (upd.date and upd.date < (self._session_start_time - 15)) or (age > 180)
+        if is_stale and cmd.command in ("shutdown", "restart", "lock", "logoff", "kill", "uninstall", "msg"):
+            log.warning("Bo qua lenh %s qua han (age=%ss, date=%s)", cmd.command, round(age, 1), upd.date)
+            from datetime import datetime
+            sent_time = datetime.fromtimestamp(upd.date).strftime("%H:%M:%S %d/%m/%Y") if upd.date else "trước đó"
+            self.reply(upd, f"{M.EMOJI['warn']} Lệnh `/{cmd.command}` được gửi lúc `{sent_time}` "
+                            f"(khi máy đang tắt hoặc đã gửi cách đây {int(age)}s).\n"
+                            f"Agent đã tự động BỎ QUA lệnh này để tránh thao tác nhầm khi máy vừa bật lại.")
+            return
+
         self.store.state.last_command_at = time.time()
         self.store.log("command", cmd=cmd.command, chat=upd.chat_id, who=upd.from_name,
                        args=cmd.text[:120])
@@ -317,7 +355,8 @@ class Agent:
             log.exception("handler %s loi", cmd.command)
             answer = M.cmd_fail(cmd.command, f"{type(e).__name__}: {e}")
         if answer:
-            self.reply(upd, answer)
+            markup = make_status_keyboard() if cmd.command in ("status", "ping", "help") else None
+            self.reply(upd, answer, reply_markup=markup)
         if self.cfg.notify.on_command and cmd.command not in ("help", "status", "ping"):
             pass  # da tra loi truc tiep, khong gui trung
 

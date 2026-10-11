@@ -51,6 +51,23 @@ class Update:
 
     @classmethod
     def from_api(cls, data: dict) -> Optional["Update"]:
+        cb = data.get("callback_query")
+        if cb:
+            msg = cb.get("message") or {}
+            chat = msg.get("chat") or {}
+            sender = cb.get("from") or {}
+            text = cb.get("data") or ""
+            name = " ".join(x for x in [sender.get("first_name"), sender.get("last_name")] if x)
+            return cls(
+                update_id=int(data.get("update_id") or 0),
+                chat_id=int(chat.get("id") or sender.get("id") or 0),
+                text=str(text),
+                message_id=int(msg.get("message_id") or 0),
+                from_id=int(sender.get("id") or 0),
+                from_name=name or str(sender.get("username") or ""),
+                date=int(msg.get("date") or time.time()),
+                raw=data,
+            )
         msg = data.get("message") or data.get("edited_message") or data.get("channel_post")
         if not msg:
             return None
@@ -222,6 +239,16 @@ class TelegramClient:
                 else:
                     raise
         return last
+
+    def answer_callback_query(self, callback_query_id: str, text: str = "") -> bool:
+        """Phan hoi callback query khi nguoi dung bam nut inline."""
+        if not callback_query_id:
+            return False
+        try:
+            self._call("answerCallbackQuery", {"callback_query_id": callback_query_id, "text": text})
+            return True
+        except Exception:
+            return False
 
     def send_photo(self, chat_id: int, photo: bytes, caption: str = "",
                    filename: str = "screen.png", silent: bool = False) -> Optional[dict]:
