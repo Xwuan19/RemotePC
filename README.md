@@ -380,7 +380,8 @@ thật sự không End Task được không* — chỉ chứng minh được tr�
 repo có sẵn một bộ chạy một lệnh:
 
 ```bat
-scripts\test.bat              :: tự xin quyền Administrator (UAC) rồi chạy cả 3 bước
+scripts\test-interactive.bat  :: người dùng — tự xin quyền Admin (UAC), giữ cửa sổ lại
+scripts\test.bat              :: agent/shell — không pause, không UAC, exit code chuẩn
 scripts\test.bat -SkipLive    :: chỉ test đơn vị, không gọi Win32 thật
 scripts\test.bat -Policy      :: thêm test ghi policy HKCU (rủi ro, xem kế hoạch mục 7)
 ```
@@ -427,7 +428,8 @@ scripts/
 ├── install.bat / .ps1  Cài đặt (tự nâng quyền Administrator)
 ├── uninstall.bat / .ps1 Gỡ cài đặt, kể cả khi chủ máy quên PIN
 ├── build.bat           Đóng gói thành .exe bằng PyInstaller
-└── test.bat / .ps1     Bộ kiểm tra một lệnh trên Windows
+├── test.bat / .ps1     Bộ kiểm tra một lệnh (agent/shell: không pause, không UAC)
+└── test-interactive.bat Bản cho người click đôi (tự nâng quyền Admin, giữ cửa sổ)
 
 tests/                  222 test — 12 file, xem bảng ở trên
 docs/WINDOWS_TEST_PLAN.md   Kế hoạch kiểm thử chi tiết trên Windows

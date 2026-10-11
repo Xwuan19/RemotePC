@@ -38,7 +38,13 @@ nằm ở `docs/WINDOWS_TEST_PLAN.md`.
 scripts\test.bat
 ```
 
-Script tự xin quyền Administrator (UAC), rồi chạy 3 bước:
+File này **dành cho agent/shell**: không `pause`, không bật hộp thoại UAC,
+không mở cửa sổ mới — stdout bắt được và exit code trả về chuẩn. (Bản
+`scripts\test-interactive.bat` là cho người click đôi, **đừng** gọi nó vì nó
+sẽ chờ UAC và chờ bấm phím.)
+
+**Chạy từ một shell đã có quyền Administrator** để test được đầy đủ. Script
+chạy 3 bước:
 
 | Bước | Nội dung | Kết quả mong đợi |
 |---|---|---|
@@ -56,8 +62,8 @@ Báo cáo đầy đủ được ghi ra `test-report.txt`.
 
 Mỗi test skip đều **in lý do**. Hãy phân biệt ba trường hợp, đừng gộp chung:
 
-- **SKIP vì thiếu quyền Admin** → chạy lại bằng `scripts\test.bat` (có UAC),
-  không phải lỗi code.
+- **SKIP vì thiếu quyền Admin** → chạy lại từ một shell **đã** elevated
+  (*Run as administrator*), không phải lỗi code.
 - **SKIP vì đang ở session 0** (chạy qua SSH/dịch vụ, không có desktop) →
   các test hiển thị không chạy được. Cần một phiên đăng nhập thật có màn hình.
 - **FAIL** → lỗi thật. Đây là thứ cần báo cáo và sửa.

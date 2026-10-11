@@ -26,11 +26,20 @@ là tuỳ chọn — thiếu thì test tương ứng tự skip hoặc dùng fall
 ## Phần tự động
 
 ```bat
-scripts\test.bat
+scripts\test-interactive.bat   :: người dùng — tự xin quyền Admin, giữ cửa sổ lại
+scripts\test.bat               :: agent/shell — không pause, không UAC
 ```
+
+Hai file chạy **cùng một bộ test**; khác nhau duy nhất ở chỗ bản interactive
+tự nâng quyền và chờ bấm phím. Agent nên dùng `test.bat` từ một shell đã
+elevated.
 
 Kết quả mong đợi: `>>> TAT CA XANH <<<`, exit code 0, báo cáo ở
 `test-report.txt`.
+
+Bước 1 đặt `REMOTEPC_SKIP_LIVE=1` để **không** chạy trùng nhóm test sống ở
+bước 2 — nếu không, hộp thoại và ảnh chụp màn hình sẽ nháy lên hai lần và
+số liệu tổng kết bị cộng dồn sai.
 
 ### 1. Kích thước struct Win32
 
