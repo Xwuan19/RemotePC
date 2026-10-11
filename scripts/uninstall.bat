@@ -6,7 +6,6 @@ rem             scripts\uninstall.bat keepdata     -> giu lai nhat ky
 rem             scripts\uninstall.bat force        -> bo qua PIN (chu may)
 rem ============================================================================
 setlocal EnableDelayedExpansion
-chcp 65001 >nul
 
 set "MODE=%~1"
 
