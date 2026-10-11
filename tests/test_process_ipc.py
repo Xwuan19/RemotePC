@@ -153,3 +153,116 @@ class TestCrossProcessIPC(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGuardianSpawnsUIHost(unittest.TestCase):
+    """Guardian (SYSTEM) tu khoi dong uihost khi scheduled task khong chay duoc.
+
+    Day la duong "tu chua lanh": tren Windows neu task bi con pha/hong, guardian
+    phai tu bat uihost len de /msg, /lock, /screenshot van hoat dong.
+    """
+
+    def setUp(self):
+        from unittest import mock
+
+        from remotepc import installer, system_info
+        from remotepc.bot import Agent
+        from remotepc.config import Config
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.data = self.base / "data"
+        self.data.mkdir()
+        self.cfg_path = self.base / "config.json"
+
+        self.cfg = Config()
+        self.cfg.telegram.bot_token = "1:fake"
+        self.cfg.telegram.allowed_chat_ids = [111]
+        self.cfg.machine_tag = "pc-heal"
+        self.cfg.data_dir = str(self.data)
+        self.cfg.stealth.display_name = "TenNguyTrangKhac"
+        from remotepc.config import save_config
+        save_config(self.cfg, self.cfg_path)
+
+        cfg, path = load_config(str(self.cfg_path))
+        self.layout = layout_for(cfg, path).ensure()
+        self.agent = Agent(cfg, path, self.layout, stealth=False)
+        self.queue = ipc.JobQueue(self.layout)
+        self.inbox = InboxReader(self.layout)
+        self._spawned: list[int] = []
+
+        # Gia lap: dang o session 0 (SYSTEM) va scheduled task THAT BAI
+        self._patches = [
+            mock.patch.object(system_info, "is_session_zero", return_value=True),
+            mock.patch.object(installer, "run_task", return_value=(False, "ERROR: task khong ton tai")),
+            mock.patch.dict(os.environ, {"PYTHONPATH": str(repo_root()) + os.pathsep
+                                         + os.environ.get("PYTHONPATH", "")}),
+        ]
+        for p in self._patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self._patches:
+            p.stop()
+        for pid in self._spawned:
+            try:
+                self.proc_kill(pid)
+            except Exception:
+                pass
+        self.tmp.cleanup()
+
+    @staticmethod
+    def proc_kill(pid: int) -> None:
+        import signal
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+    def _track_spawned(self, timeout: float = 15.0) -> int:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            pid = self.inbox.uihost_pid()
+            if pid and self.inbox.uihost_alive():
+                if pid not in self._spawned:
+                    self._spawned.append(pid)
+                return pid
+            time.sleep(0.2)
+        return 0
+
+    # ------------------------------------------------------------------ #
+
+    def test_spawned_uihost_handles_job(self):
+        """run_task that bai -> guardian spawn uihost -> job van duoc xu ly."""
+        ok = self.agent.keep_uihost_alive(force=True)
+        self.assertTrue(ok, "guardian phai khoi dong duoc uihost bang duong fallback")
+
+        pid = self._track_spawned()
+        self.assertTrue(pid, f"uihost duoc spawn khong bao hello ve {self.layout.inbox_dir}")
+        self.assertNotEqual(pid, os.getpid())
+
+        ack = self.queue.request(ipc.JOB_MESSAGE,
+                                 {"text": "Con ngu di", "title": "Bo noi", "timeout": 1},
+                                 timeout=25)
+        self.assertIsNotNone(ack, "uihost duoc spawn khong xu ly job")
+        self.assertTrue(ack.ok, ack.error)
+        self.assertEqual(ack.result.get("pid") if "pid" in (ack.result or {}) else pid, pid)
+
+    def test_spawned_uihost_uses_configured_data_dir(self):
+        """Bug da gap: spawn thieu --config -> uihost doc nham thu muc mac dinh."""
+        self.agent.keep_uihost_alive(force=True)
+        pid = self._track_spawned()
+        self.assertTrue(pid)
+        stray = Path.home() / ".local" / "share" / "TenNguyTrangKhac" / "ipc" / "inbox" / "hello.json"
+        self.assertFalse(stray.exists(), "uihost dang ghi nham thu muc mac dinh")
+        self.assertTrue((self.layout.inbox_dir / "hello.json").exists())
+
+    def test_not_spawned_when_task_works(self):
+        """Neu scheduled task chay duoc thi khong can spawn them ban nua."""
+        from unittest import mock
+
+        from remotepc import installer
+        with mock.patch.object(installer, "run_task", return_value=(True, "")) as rt:
+            self.agent.keep_uihost_alive(force=True)
+        self.assertTrue(rt.called)
+        self.assertEqual(self._spawned, [])

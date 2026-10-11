@@ -347,7 +347,7 @@ python -m remotepc watchdog -v              # chạy 1 vòng watchdog
 python -m remotepc status                   # in trạng thái ra terminal
 ```
 
-**Test** — 159 test, chạy trong ~25 giây, không cần mạng, không cần Windows:
+**Test** — 162 test, chạy trong ~27 giây, không cần mạng, không cần Windows:
 
 ```bash
 python -m unittest discover -s tests -t . -v
@@ -362,7 +362,7 @@ python -m pyflakes remotepc/*.py tests/*.py     # 0 lỗi
 | `test_agent.py` | Từng lệnh một: PIN, ghép nối `/pair`, định tuyến sang UI host khi ở session 0 |
 | `test_ipc.py` | Hàng đợi job: ack, hết hạn, lỗi handler, job chỉ chạy một lần |
 | `test_e2e.py` | **Server Telegram giả lập** trong máy: tin nhắn, ảnh multipart, retry/429, proxy |
-| `test_process_ipc.py` | **Bật `uihost` thành process riêng** → kiểm tra guardian ↔ uihost nói chuyện được thật |
+| `test_process_ipc.py` | **Bật `uihost` thành process riêng** → guardian ↔ uihost nói chuyện được thật; và khi scheduled task hỏng thì guardian **tự spawn** uihost vẫn cứu được `/msg` |
 | `test_full_stack.py` | **Bật cả agent thành process riêng** (`python -m remotepc run`) → Telegram thật → lệnh → trả lời; lệnh `shutdown` của hệ điều hành được thay bằng script giả để test không tắt máy |
 
 Hai test cuối tồn tại vì chúng đã bắt được lỗi mà test trong cùng một process
