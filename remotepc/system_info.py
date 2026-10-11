@@ -506,6 +506,40 @@ def collect(tag: str = "pc1", with_public_ip: bool = True) -> SystemInfo:
     return info
 
 
+def format_shutdown_reason(raw: str) -> str:
+    """Chuyen thong bao Event 1074 tieng Anh thanh tieng Viet ngan gon, de hieu."""
+    if not raw:
+        return "Không rõ nguyên nhân"
+    import re
+    user_m = re.search(r"on behalf of user\s+(.*?)\s+for the following reason", raw, re.IGNORECASE)
+    user = user_m.group(1).strip() if user_m else ""
+
+    proc_m = re.search(r"The process\s+(.*?)\s*(?:\(|$)", raw, re.IGNORECASE)
+    proc = Path(proc_m.group(1).strip()).name if proc_m else ""
+
+    comment_m = re.search(r"Comment:\s*(.*)", raw, re.IGNORECASE)
+    comment = comment_m.group(1).strip() if comment_m else ""
+
+    type_m = re.search(r"Shutdown Type:\s*([^\s]+)", raw, re.IGNORECASE)
+    stype = type_m.group(1).lower() if type_m else "shutdown"
+
+    if not user and not proc:
+        return raw[:300]
+
+    action_vn = "Khởi động lại" if "restart" in stype else "Tắt máy"
+    if "system" in user.lower():
+        actor = "Lệnh từ xa (Bot Telegram)"
+    elif "explorer" in proc.lower():
+        actor = f"Người dùng bấm trực tiếp ({user.split('\\')[-1]})"
+    else:
+        actor = user.split("\\")[-1] or user
+
+    parts = [f"{action_vn} bởi: *{actor}*"]
+    if comment and comment.lower() != "no title for this reason could be found":
+        parts.append(f"Lời nhắn: “{comment}”")
+    return " · ".join(parts)
+
+
 def last_shutdown_event() -> str:
     """Doc su kien 1074 (System log): ai/tien trinh nao vua ra lenh tat may, ly do gi."""
     if not IS_WINDOWS:
@@ -517,7 +551,7 @@ def last_shutdown_event() -> str:
     )
     out = _run([ps, "-NoProfile", "-Command", script], timeout=25)
     text = " ".join(out.split())
-    return text[:600]
+    return format_shutdown_reason(text)
 
 
 def os_full_name() -> str:
