@@ -7,6 +7,12 @@ máy **Windows thật**. Mục tiêu: xác nhận tool hoạt động thật, kh
 Toàn bộ bối cảnh dự án nằm ở `README.md`. Kế hoạch kiểm thử chi tiết từng mục
 nằm ở `docs/WINDOWS_TEST_PLAN.md`.
 
+> **File này là nguồn chuẩn.** Nếu một GitHub issue mô tả khác đi (ví dụ issue
+> #2 nói `test.bat` "tự xin quyền Administrator (UAC)" — đã lỗi thời), hãy làm
+> theo file này. Lý do: token tự động tạo được issue nhưng không sửa được
+> (HTTP 403), nên nội dung issue có thể bị cũ mà không đính chính tại chỗ được.
+> Issue #5 là bản đính chính cho #2.
+
 ---
 
 ## Quy tắc an toàn — đọc trước khi làm bất cứ gì
