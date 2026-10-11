@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import actions, ipc, system_info
-from .paths import Layout, data_dir, IS_WINDOWS
+from .config import layout_for, load_config
+from .paths import Layout, IS_WINDOWS
 
 log = logging.getLogger("remotepc.uihost")
 
@@ -214,37 +215,44 @@ class InboxReader:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="remotepc-uihost",
+                                     description="Thanh phan hien thi cua RemotePC")
+    parser.add_argument("--config", help="duong dan config.json (bat buoc khi ten thu muc khac mac dinh)")
+    parser.add_argument("--once", action="store_true", help="xu ly 1 vong roi thoat")
+    parser.add_argument("--job", help="JSON cua 1 job: xu ly, ack roi thoat")
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args(sys.argv[1:] if argv is None else list(argv))
+
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stderr,
     )
-    argv = list(sys.argv[1:] if argv is None else argv)
     if IS_WINDOWS:
         from .stealth import hide_console
         hide_console()
 
-    disguise = os.environ.get("REMOTEPC_NAME", "SysHealthAgent")
-    base = Path(os.environ["REMOTEPC_DATA"]) if os.environ.get("REMOTEPC_DATA") else data_dir(disguise)
-    layout = Layout(base)
+    # PHAI doc config de biet thu muc du lieu that (ten nguy trang co the da doi)
+    cfg_path = args.config or os.environ.get("REMOTEPC_CONFIG")
+    if cfg_path:
+        cfg, cfg_path = load_config(cfg_path)
+    else:
+        cfg, cfg_path = load_config(None, os.environ.get("REMOTEPC_NAME", "SysHealthAgent"))
+    layout = layout_for(cfg, cfg_path)
     host = UIHost(layout)
 
-    if "--once" in argv:
-        return host.run(once=True)
-
-    # Che do chay 1 lan roi thoat (dung khi guardian goi `schtasks /run` de hien 1 hop thoai)
-    if "--job" in argv:
-        i = argv.index("--job")
+    if args.job:
         try:
-            spec = json.loads(argv[i + 1])
-        except (IndexError, json.JSONDecodeError):
+            job = ipc.Job.from_dict(json.loads(args.job))
+        except json.JSONDecodeError:
             return 2
-        job = ipc.Job.from_dict(spec)
         ok, result, err = host.handle(job)
         host.worker.ack(job, ok, result, err)
         return 0 if ok else 1
 
-    return host.run()
+    return host.run(once=args.once)
 
 
 if __name__ == "__main__":

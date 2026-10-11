@@ -349,6 +349,29 @@ def save_config(cfg: Config, path: str | os.PathLike) -> Path:
     return p
 
 
+def layout_for(cfg: "Config", cfg_path: Path):
+    """Thu muc du lieu that su cua 1 cau hinh.
+
+    Moi tien trinh (guardian / uihost / watchdog / CLI) PHAI dung ham nay,
+    neu khong chung se nhin vao 2 thu muc khac nhau khi nguoi dung doi ten
+    nguy trang hoac dat config o cho khac.
+
+    Thu tu uu tien: `data_dir` trong config -> thu muc chua config.json
+    -> thu muc mac dinh theo ten nguy trang.
+    """
+    from .paths import Layout
+
+    if cfg.data_dir:
+        base = Path(cfg.data_dir)
+    elif cfg_path and Path(cfg_path).name == "config.json":
+        base = Path(cfg_path).parent
+    elif cfg_path:
+        base = Path(cfg_path).parent
+    else:
+        base = cfg.data_layout_dir()
+    return Layout(base)
+
+
 def make_machine_id() -> str:
     """ID may: uu tien MachineGuid cua Windows, fallback hostname+random."""
     if IS_WINDOWS:

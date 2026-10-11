@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import system_info
-from .config import Config, load_config
+from .config import Config, layout_for, load_config
 from .installer import run, run_task, task_exists, task_names
 from .paths import IS_WINDOWS, Layout
 from .state import atomic_write_json
@@ -206,17 +206,24 @@ def run_once(cfg: Config, layout: Layout, verbose: bool = True) -> list[str]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="remotepc-watchdog",
+                                     description="Hồi sinh guardian/uihost, tạo lại task bị xoá")
+    parser.add_argument("--config", help="đường dẫn config.json")
+    parser.add_argument("--loop", action="store_true", help="chạy mãi, mỗi 60 giây một vòng")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    args = parser.parse_args(sys.argv[1:] if argv is None else list(argv))
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         stream=sys.stderr)
-    cfg, cfg_path = load_config(os.environ.get("REMOTEPC_CONFIG"))
-    base = Path(cfg.data_dir) if cfg.data_dir else Path(cfg_path).parent
-    layout = Layout(base).ensure()
+    cfg, cfg_path = load_config(args.config or os.environ.get("REMOTEPC_CONFIG"))
+    layout = layout_for(cfg, cfg_path).ensure()
     if IS_WINDOWS:
         from .stealth import hide_console
         hide_console()
-    verbose = "--verbose" in argv or "-v" in argv
-    if "--loop" in argv:
+    verbose = args.verbose
+    if args.loop:
         while True:
             try:
                 for line in run_once(cfg, layout):

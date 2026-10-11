@@ -25,7 +25,7 @@ from typing import Any, Callable, Optional
 
 from . import actions, ipc, messages as M, system_info
 from .commands import ParsedCommand, format_duration, parse_duration, parse_message
-from .config import Config, load_config, save_config, set_by_path
+from .config import Config, layout_for, load_config, save_config, set_by_path
 from .curfew import format_min, parse_days, parse_hhmm
 from .monitor import Monitor
 from .paths import IS_WINDOWS, Layout, python_command_for
@@ -1065,7 +1065,7 @@ def run_agent(config_path: Optional[str] = None, stealth: bool = True,
               once: bool = False, log_level: int = logging.INFO) -> int:
     logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg, cfg_path = load_config(config_path)
-    layout = Layout(cfg.data_layout_dir())
+    layout = layout_for(cfg, cfg_path)
     if not cfg.telegram.bot_token:
         print("Chua co bot_token. Chay: python -m remotepc init", file=sys.stderr)
         return 2

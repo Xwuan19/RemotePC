@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import __version__, messages as M
-from .config import (Config, load_config, make_machine_id, save_config, set_by_path)
+from .config import (Config, layout_for, load_config, make_machine_id, save_config,
+                     set_by_path)
 from .paths import IS_WINDOWS, Layout, is_frozen, repo_root
 
 log = logging.getLogger("remotepc.cli")
@@ -38,12 +39,6 @@ def _utf8_stdout() -> None:
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except OSError:
             pass
-
-
-def layout_for(cfg: Config, cfg_path: Path) -> Layout:
-    """Thu muc du lieu: uu tien data_dir trong config, neu khong thi thu muc chua config.json."""
-    base = Path(cfg.data_dir) if cfg.data_dir else Path(cfg_path).parent
-    return Layout(base)
 
 
 def console(text: str) -> str:
@@ -211,18 +206,30 @@ def cmd_run(args: argparse.Namespace) -> int:
     return run_agent(config_path=args.config, stealth=stealth, once=args.once, log_level=level)
 
 
+def _child_argv(args: argparse.Namespace, *flags: str) -> list[str]:
+    """Dựng argv cho tiến trình con, NHỚ chuyển tiếp --config.
+
+    Thiếu bước này thì uihost/watchdog sẽ rơi về thư mục dữ liệu mặc định và
+    nghe nhầm chỗ (guardian ghi job vào một nơi, uihost đọc ở nơi khác).
+    """
+    argv: list[str] = []
+    cfg = getattr(args, "config", None)
+    if cfg:
+        argv += ["--config", str(cfg)]
+    for name in flags:
+        if getattr(args, name.lstrip("-").replace("-", "_"), False):
+            argv.append(name)
+    return argv
+
+
 def cmd_uihost(args: argparse.Namespace) -> int:
     from .uihost import main as ui_main
-    argv = ["--once"] if args.once else []
-    return ui_main(argv)
+    return ui_main(_child_argv(args, "--once", "--debug"))
 
 
 def cmd_watchdog(args: argparse.Namespace) -> int:
     from .watchdog import main as wd_main
-    argv = ["--verbose"] if args.verbose else []
-    if args.loop:
-        argv.append("--loop")
-    return wd_main(argv)
+    return wd_main(_child_argv(args, "--loop", "--verbose"))
 
 
 def cmd_notify_shutdown(args: argparse.Namespace) -> int:
@@ -484,7 +491,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", help="đường dẫn config.json (mặc định: trong ProgramData)")
     sub = p.add_subparsers(dest="cmd")
 
+    # `--config` dung duoc ca 2 kieu: `remotepc --config X uihost` va
+    # `remotepc uihost --config X`. Phai dat default=SUPPRESS, neu khong
+    # argparse se cho default None cua lenh con ghi de gia tri da parse o cap cha.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=argparse.SUPPRESS,
+                        help="đường dẫn config.json")
+
     def add(name: str, fn, help_text: str, **kw: Any):
+        kw.setdefault("parents", []).append(common)
         sp = sub.add_parser(name, help=help_text, **kw)
         sp.set_defaults(func=fn)
         return sp
@@ -501,6 +516,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("uihost", cmd_uihost, "chạy thành phần hiển thị (bình thường do task tự chạy)")
     sp.add_argument("--once", action="store_true")
+    sp.add_argument("--debug", action="store_true")
 
     sp = add("watchdog", cmd_watchdog, "chạy 1 vòng kiểm tra / hoặc --loop liên tục")
     sp.add_argument("--loop", action="store_true")
@@ -569,6 +585,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not hasattr(args, "config"):
+        args.config = None
     if not getattr(args, "func", None):
         parser.print_help()
         return 0
