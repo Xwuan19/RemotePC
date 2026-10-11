@@ -360,6 +360,8 @@ python -m pyflakes remotepc/*.py tests/*.py     # 0 lỗi
 | `test_commands.py` | Phân tích `/msg --full --title "..." nội dung`, alias tiếng Việt, `@tag`, `1m30` → 90s |
 | `test_monitor.py` | Báo boot/login/idle, chuỗi 23:00 → 23:30 → 00:00, tự tắt máy khi quá giờ |
 | `test_agent.py` | Từng lệnh một: PIN, ghép nối `/pair`, định tuyến sang UI host khi ở session 0 |
+| `test_actions.py` | argv thật của lệnh Windows: `shutdown /s /t 45 /f /c`, `/r` khi restart, `/a` khi huỷ, `/l` khi đăng xuất, `taskkill /IM\|/PID`, clamp delay, parse `tasklist` CSV |
+| `test_config.py` | Merge mặc định với config cũ, config hỏng, băm/kiểm PIN, `set key=value`, bỏ qua key lạ, tuỳ chọn proxy |
 | `test_ipc.py` | Hàng đợi job: ack, hết hạn, lỗi handler, job chỉ chạy một lần |
 | `test_e2e.py` | **Server Telegram giả lập** trong máy: tin nhắn, ảnh multipart, retry/429, proxy |
 | `test_process_ipc.py` | **Bật `uihost` thành process riêng** → guardian ↔ uihost nói chuyện được thật; và khi scheduled task hỏng thì guardian **tự spawn** uihost vẫn cứu được `/msg` |
@@ -373,6 +375,7 @@ UI host ngồi đọc nhầm thư mục và **mọi lệnh `/msg`, `/lock`, `/sc
 
 ```
 remotepc/
+├── __init__.py         phiên bản + tên nguỵ trang mặc định
 ├── __main__.py         CLI: init / run / install / uninstall / doctor / build ...
 ├── bot.py              Agent: vòng lặp Telegram + bộ xử lý lệnh + điều phối hành động
 ├── monitor.py          Phát hiện boot / login / idle / giờ giới nghiêm / quá giờ
