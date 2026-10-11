@@ -187,18 +187,20 @@ if ($exe) {
     $runner += "-m", "remotepc"
     Write-Ok "Dung Python: $Python"
 
-    # Cai dat thu vien phu thuoc (mss cho screenshot)
+    # Cai dat thu vien phu thuoc (tu dong cai bat ky thu vien nao thieu)
     try {
         $pyCmd = $Python.Split(" ")[0]
         $pySubArgs = if ($Python.Split(" ").Length -gt 1) { $Python.Split(" ")[1..($Python.Split(" ").Length - 1)] } else { @() }
+        $reqFile = Join-Path $root "requirements.txt"
+        if (Test-Path $reqFile) {
+            Write-Host "    [+] Tu dong kiem tra va cai dat thu vien (requirements.txt)..." -ForegroundColor Yellow
+            & $pyCmd @($pySubArgs + @("-m", "pip", "install", "--quiet", "-r", $reqFile)) 2>$null
+        }
         $checkMss = & $pyCmd @($pySubArgs + @("-c", "import mss; print('ok')")) 2>$null
         if ($checkMss -ne "ok") {
-            Write-Host "    [+] Dang cai dat thu vien ho tro chup man hinh (mss)..." -ForegroundColor Yellow
             & $pyCmd @($pySubArgs + @("-m", "pip", "install", "--quiet", "mss>=9.0.1")) 2>$null
-            Write-Ok "Da cai dat mss."
-        } else {
-            Write-Ok "Thu vien chup man hinh (mss): Da co san."
         }
+        Write-Ok "Thu vien phu thuoc (mss): San sang."
     } catch {
         Write-Warn2 "Khong the cai mss qua pip, tool se dung co che chup man hinh mac dinh cua Windows."
     }
