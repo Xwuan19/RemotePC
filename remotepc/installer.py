@@ -266,9 +266,13 @@ def _copy_program(install_root: Path, cfg: Config) -> list[str]:
     if not pkg_src.exists():
         pkg_src = Path(__file__).resolve().parent
     pkg_dst = bin_dir / "remotepc"
+    if IS_WINDOWS and pkg_dst.exists():
+        run(["takeown", "/f", str(pkg_dst), "/r", "/d", "y"])
+        run(["icacls", str(pkg_dst), "/reset", "/t", "/c"])
+        run(["icacls", str(pkg_dst), "/grant", "*S-1-5-32-544:(OI)(CI)(F)", "/t", "/c"])
     if pkg_dst.exists():
         shutil.rmtree(pkg_dst, ignore_errors=True)
-    shutil.copytree(pkg_src, pkg_dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(pkg_src, pkg_dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     notes.append(f"Đã copy gói `remotepc` → {pkg_dst}")
     for extra in ("requirements.txt",):
         f = repo_root() / extra
@@ -409,13 +413,14 @@ def install(cfg: Config, cfg_path: Path, level: Optional[int] = None,
     install_root = cfg.install_layout_dir()
     layout = Layout(cfg.data_layout_dir())
     if IS_WINDOWS:
-        try:
-            if os.path.exists(str(layout.base)):
-                run(["takeown", "/f", str(layout.base), "/r", "/d", "y"])
-                run(["icacls", str(layout.base), "/reset", "/t", "/c"])
-                run(["icacls", str(layout.base), "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
-        except Exception:
-            pass
+        for target in (install_root, layout.base):
+            try:
+                if os.path.exists(str(target)):
+                    run(["takeown", "/f", str(target), "/r", "/d", "y"])
+                    run(["icacls", str(target), "/reset", "/t", "/c"])
+                    run(["icacls", str(target), "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
+            except Exception:
+                pass
     layout.ensure()
 
     # 1) config

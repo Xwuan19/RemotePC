@@ -301,14 +301,15 @@ if (-not $SkipInit) {
 # 3. Cai dat tien trinh he thong
 # --------------------------------------------------------------------------- #
 Write-Step "Cai dat agent (muc bao ve $Level)"
-# Reset quyen tren thu muc du lieu neu da co tu truoc de tranh vuong DENY cu
-$dataDir = "C:\ProgramData\SysHealthAgent"
-if (Test-Path $dataDir) {
-    try {
-        takeown /f $dataDir /r /d y 2>$null | Out-Null
-        icacls $dataDir /reset /t /c 2>$null | Out-Null
-        icacls $dataDir /grant "SYSTEM:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" 2>$null | Out-Null
-    } catch {}
+# Reset quyen tren thu muc du lieu va chuong trinh neu da co tu truoc de tranh vuong DENY cu
+foreach ($target in @("C:\ProgramData\SysHealthAgent", "C:\Program Files\SysHealthAgent")) {
+    if (Test-Path $target) {
+        try {
+            takeown /f $target /r /d y 2>$null | Out-Null
+            icacls $target /reset /t /c 2>$null | Out-Null
+            icacls $target /grant "SYSTEM:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" 2>$null | Out-Null
+        } catch {}
+    }
 }
 $installArgs = @("install", "--level", "$Level")
 foreach ($c in $Child) { $installArgs += @("--child", $c) }
