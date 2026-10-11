@@ -84,6 +84,35 @@ if IS_WINDOWS:
     advapi32 = ctypes.windll.advapi32        # type: ignore[attr-defined]
 
 
+# Struct Win32 dinh nghia o module level, dung type co do rong tuong minh
+# (DWORD = c_uint32). Ly do: `c_ulong` la 4 byte tren Windows (mo hinh LLP64)
+# nhung 8 byte tren Linux/macOS (LP64) -> struct se lech kich thuoc tuy he dieu
+# hanh va khong the kiem chung layout bang test o may dev.
+DWORD = ctypes.c_uint32
+UINT32 = ctypes.c_uint32
+ULONG64 = ctypes.c_ulonglong
+
+
+class MEMORYSTATUSEX(ctypes.Structure):
+    """typedef struct _MEMORYSTATUSEX (sysinfoapi.h) - 64 byte tren ca x86 lan x64."""
+    _fields_ = [
+        ("dwLength", DWORD),
+        ("dwMemoryLoad", DWORD),
+        ("ullTotalPhys", ULONG64),
+        ("ullAvailPhys", ULONG64),
+        ("ullTotalPageFile", ULONG64),
+        ("ullAvailPageFile", ULONG64),
+        ("ullTotalVirtual", ULONG64),
+        ("ullAvailVirtual", ULONG64),
+        ("ullAvailExtendedVirtual", ULONG64),
+    ]
+
+
+class LASTINPUTINFO(ctypes.Structure):
+    """typedef struct tagLASTINPUTINFO (winuser.h) - 8 byte."""
+    _fields_ = [("cbSize", UINT32), ("dwTime", DWORD)]
+
+
 def get_active_window() -> Optional[ActiveWindow]:
     if not IS_WINDOWS:
         return _active_window_unix()
@@ -128,9 +157,6 @@ def idle_seconds() -> float:
     """So giay ke tu lan cuoi ban phim/chuot duoc dung."""
     if not IS_WINDOWS:
         return 0.0
-
-    class LASTINPUTINFO(ctypes.Structure):
-        _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
     try:
         info = LASTINPUTINFO()
@@ -292,15 +318,6 @@ def memory_percent() -> float:
             return round((total - avail) / total * 100, 1) if total else -1.0
         except (OSError, ValueError, ZeroDivisionError):
             return -1.0
-
-    class MEMORYSTATUSEX(ctypes.Structure):
-        _fields_ = [
-            ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
-            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
-            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
-            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
-            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-        ]
 
     try:
         stat = MEMORYSTATUSEX()

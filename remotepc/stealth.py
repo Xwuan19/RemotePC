@@ -87,23 +87,62 @@ def detach_console() -> None:
 # 2. Chan End Task (DENY ACE tren process object)
 # --------------------------------------------------------------------------- #
 
-if IS_WINDOWS:
-    class _TRUSTEEW(ctypes.Structure):
-        _fields_ = [
-            ("pMultipleTrustee", ctypes.c_void_p),
-            ("MultipleTrusteeOperation", ctypes.c_int),
-            ("TrusteeForm", ctypes.c_int),
-            ("TrusteeType", ctypes.c_int),
-            ("ptstrName", ctypes.c_wchar_p),
-        ]
+# Struct dung cho SetEntriesInAclW (advapi32).
+# KHONG nam trong guard `if IS_WINDOWS` vi chung chi dung ctypes thuan -
+# giu o ngoai de test duoc kich thuoc/offset tren may dev (Linux/macOS).
+# Sai layout o day = SetEntriesInAclW doc nham bo nho -> chan End Task that bai.
+# Cac truong DWORD dung c_uint32 (KHONG dung c_ulong):
+#   - Windows x64 theo mo hinh LLP64 -> ULONG = 4 byte
+#   - Linux/macOS x64 theo LP64      -> unsigned long = 8 byte
+# Neu dung c_ulong, struct se lech kich thuoc tuy he dieu hanh va
+# SetEntriesInAclW doc nham bo nho (chan End Task that bai trong im lang).
+DWORD = ctypes.c_uint32
+LONG32 = ctypes.c_int32
 
-    class _EXPLICIT_ACCESSW(ctypes.Structure):
-        _fields_ = [
-            ("grfAccessPermissions", ctypes.c_ulong),
-            ("grfAccessMode", ctypes.c_ulong),
-            ("grfInheritance", ctypes.c_ulong),
-            ("Trustee", _TRUSTEEW),
-        ]
+
+class TRUSTEE_W(ctypes.Structure):
+    """typedef struct _TRUSTEE_W (accapi.h)."""
+    _fields_ = [
+        ("pMultipleTrustee", ctypes.c_void_p),
+        ("MultipleTrusteeOperation", LONG32),   # MULTIPLE_TRUSTEE_OPERATION
+        ("TrusteeForm", LONG32),                # TRUSTEE_IS_SID=0 / IS_NAME=1
+        ("TrusteeType", LONG32),                # TRUSTEE_TYPE
+        ("ptstrName", ctypes.c_wchar_p),
+    ]
+
+
+class EXPLICIT_ACCESS_W(ctypes.Structure):
+    """typedef struct _EXPLICIT_ACCESS_W (accapi.h)."""
+    _fields_ = [
+        ("grfAccessPermissions", DWORD),
+        ("grfAccessMode", DWORD),               # GRANT=1, SET=2, DENY=3
+        ("grfInheritance", DWORD),              # NO_INHERITANCE=0
+        ("Trustee", TRUSTEE_W),
+    ]
+
+
+# Ten cu, giu de khong vo cac cho dang goi
+_TRUSTEEW = TRUSTEE_W
+_EXPLICIT_ACCESSW = EXPLICIT_ACCESS_W
+
+
+ULONG_PTR = ctypes.c_size_t   # pointer-sized: 8 byte tren x64, 4 byte tren x86
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    """typedef struct tagPROCESSENTRY32W (tlhelp32.h), 568 byte tren x64."""
+    _fields_ = [
+        ("dwSize", DWORD),
+        ("cntUsage", DWORD),
+        ("th32ProcessID", DWORD),
+        ("th32DefaultHeapID", ULONG_PTR),
+        ("th32ModuleID", DWORD),
+        ("cntThreads", DWORD),
+        ("th32ParentProcessID", DWORD),
+        ("pcPriClassBase", LONG32),
+        ("dwFlags", DWORD),
+        ("szExeFile", ctypes.c_wchar * 260),
+    ]
 
 
 def _sid_from_string(sid_text: str) -> Optional[Any]:
@@ -217,15 +256,6 @@ def find_pids_by_name(exe_name: str) -> list[int]:
         return []
     TH32CS_SNAPPROCESS = 0x00000002
     INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
-
-    class PROCESSENTRY32W(ctypes.Structure):
-        _fields_ = [
-            ("dwSize", ctypes.c_ulong), ("cntUsage", ctypes.c_ulong),
-            ("th32ProcessID", ctypes.c_ulong), ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
-            ("th32ModuleID", ctypes.c_ulong), ("cntThreads", ctypes.c_ulong),
-            ("th32ParentProcessID", ctypes.c_ulong), ("pcPriClassBase", ctypes.c_long),
-            ("dwFlags", ctypes.c_ulong), ("szExeFile", ctypes.c_wchar * 260),
-        ]
 
     pids: list[int] = []
     try:
