@@ -347,7 +347,7 @@ python -m remotepc watchdog -v              # chạy 1 vòng watchdog
 python -m remotepc status                   # in trạng thái ra terminal
 ```
 
-**Test** — 162 test, chạy trong ~27 giây, không cần mạng, không cần Windows:
+**Test** — 185 test, chạy trong ~27 giây, không cần mạng, không cần Windows:
 
 ```bash
 python -m unittest discover -s tests -t . -v
@@ -366,8 +366,9 @@ python -m pyflakes remotepc/*.py tests/*.py     # 0 lỗi
 | `test_e2e.py` | **Server Telegram giả lập** trong máy: tin nhắn, ảnh multipart, retry/429, proxy |
 | `test_process_ipc.py` | **Bật `uihost` thành process riêng** → guardian ↔ uihost nói chuyện được thật; và khi scheduled task hỏng thì guardian **tự spawn** uihost vẫn cứu được `/msg` |
 | `test_full_stack.py` | **Bật cả agent thành process riêng** (`python -m remotepc run`) → Telegram thật → lệnh → trả lời; lệnh `shutdown` của hệ điều hành được thay bằng script giả để test không tắt máy |
+| `test_windows_payloads.py` | Phần chỉ chạy trên Windows nhưng vẫn kiểm chứng được ở máy dev: **layout struct ctypes** (`EXPLICIT_ACCESS_W`, `TRUSTEE_W`, `PROCESSENTRY32W`, `MEMORYSTATUSEX`, `LASTINPUTINFO`) phải khớp header MSVC trên cả x86 lẫn x64, và **XML của 4 scheduled task** phải parse được, đúng `Hidden` / `AllowHardTerminate` / `S-1-5-18` / `S-1-5-32-545` / event 1074, escape đúng khi tên nguỵ trang chứa `& < > "`, quote đúng đường dẫn có dấu cách (kể cả bản đóng gói `.exe` trỏ vào `bin\` chứ không phải thư mục build) |
 
-Hai test cuối tồn tại vì chúng đã bắt được lỗi mà test trong cùng một process
+Hai test đa tiến trình tồn tại vì chúng đã bắt được lỗi mà test trong cùng một process
 không thấy: `--config` không được chuyển tiếp xuống tiến trình con, khiến
 UI host ngồi đọc nhầm thư mục và **mọi lệnh `/msg`, `/lock`, `/screenshot` đều treo**.
 
