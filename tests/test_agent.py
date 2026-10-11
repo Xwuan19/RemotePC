@@ -410,6 +410,52 @@ class TestUihostRouting(AgentTestCase):
             self.send("/shutdown 60 --pin 1234")
         self.assertTrue(self.power_calls, "Tat may phai chay duoc tu SYSTEM")
 
+    def test_format_shutdown_reason_remote_bot(self):
+        raw = ("The process C:\\Windows\\SYSTEM32\\shutdown.exe (DESKTOP-9FVG46V) has initiated the shutdown "
+               "of computer DESKTOP-9FVG46V on behalf of user NT AUTHORITY\\SYSTEM for the following reason: "
+               "No title for this reason could be found Reason Code: 0x800000ff Shutdown Type: shutdown "
+               "Comment: Tat may di ngu nhanh cho tao.")
+        res = system_info.format_shutdown_reason(raw)
+        self.assertIn("Tắt máy bởi: *Lệnh từ xa (Bot Telegram)*", res)
+        self.assertIn("Lời nhắn: “Tat may di ngu nhanh cho tao.”", res)
+
+    def test_format_shutdown_reason_user_direct(self):
+        raw = ("The process C:\\Windows\\explorer.exe (DESKTOP-9FVG46V) has initiated the shutdown of computer "
+               "DESKTOP-9FVG46V on behalf of user DESKTOP-9FVG46V\\emtrai for the following reason: "
+               "Other (Planned) Reason Code: 0x800000ff Shutdown Type: shutdown")
+        res = system_info.format_shutdown_reason(raw)
+        self.assertIn("Tắt máy bởi: *Người dùng bấm trực tiếp (emtrai)*", res)
+
+    def test_format_shutdown_reason_aborted(self):
+        raw = "The shutdown of computer DESKTOP-9FVG46V has been aborted by user NT AUTHORITY\\SYSTEM."
+        res = system_info.format_shutdown_reason(raw)
+        self.assertIn("Đã huỷ tắt máy bởi: *Lệnh từ xa (Bot Telegram)*", res)
+
+    def test_do_action_shutdown_notifies(self):
+        with mock.patch.object(self.agent, "notify") as mock_notify:
+            self.agent.do_action("shutdown", delay=60, message="Ngu di")
+        mock_notify.assert_called_once()
+        self.assertIn("Ngu di", mock_notify.call_args.args[0])
+
+    def test_cmd_notify_shutdown_filters_bot_and_abort(self):
+        from remotepc.__main__ import cmd_notify_shutdown
+        import argparse
+        args = argparse.Namespace(config=str(self.cfg_path))
+        with mock.patch("remotepc.system_info.last_shutdown_event",
+                        return_value="Tắt máy bởi: *Lệnh từ xa (Bot Telegram)* · Lời nhắn: “test”"):
+            with mock.patch("remotepc.telegram_client.TelegramClient.send_message") as mock_send:
+                res = cmd_notify_shutdown(args)
+                self.assertEqual(res, 0)
+                mock_send.assert_not_called()
+
+        with mock.patch("remotepc.system_info.last_shutdown_event",
+                        return_value="Đã huỷ tắt máy bởi: *Lệnh từ xa (Bot Telegram)*"):
+            with mock.patch("remotepc.telegram_client.TelegramClient.send_message") as mock_send:
+                res = cmd_notify_shutdown(args)
+                self.assertEqual(res, 0)
+                mock_send.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
+

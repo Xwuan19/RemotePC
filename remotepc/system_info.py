@@ -511,6 +511,13 @@ def format_shutdown_reason(raw: str) -> str:
     if not raw:
         return "Không rõ nguyên nhân"
     import re
+    if "aborted" in raw.lower() or "abort" in raw.lower():
+        user_m = re.search(r"by user\s+(.*?)(?:\.|$)", raw, re.IGNORECASE)
+        user = user_m.group(1).strip() if user_m else ""
+        user_name = user.split("\\")[-1] if user else ""
+        actor = "Lệnh từ xa (Bot Telegram)" if "system" in user.lower() else (user_name or "Người dùng")
+        return f"Đã huỷ tắt máy bởi: *{actor}*"
+
     user_m = re.search(r"on behalf of user\s+(.*?)\s+for the following reason", raw, re.IGNORECASE)
     user = user_m.group(1).strip() if user_m else ""
 

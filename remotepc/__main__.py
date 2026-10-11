@@ -268,11 +268,33 @@ def cmd_notify_shutdown(args: argparse.Namespace) -> int:
     cfg, cfg_path = load_config(args.config)
     if not cfg.notify.on_shutdown or not cfg.telegram.bot_token or not cfg.telegram.allowed_chat_ids:
         return 0
+    import time
     from .system_info import collect, last_shutdown_event
     from .telegram_client import TelegramClient, TelegramError
 
-    info = collect(with_public_ip=False)
     reason = last_shutdown_event()
+    if not reason:
+        return 0
+    if "huỷ" in reason.lower() or "abort" in reason.lower():
+        return 0
+    if "lệnh từ xa (bot telegram)" in reason.lower():
+        return 0
+
+    # Neu shutdown do bot lenh voi do tre (delay > 0), bot da tra loi lich hen
+    # Telemetry khong gui bao som "may dang tat (offline)" khi may van dang chay
+    try:
+        from .state import State
+        layout = layout_for(cfg, cfg_path)
+        state = State.load(layout.state_file)
+        ps = state.pending_shutdown or {}
+        delay = int(ps.get("delay", 0))
+        at = float(ps.get("at", 0))
+        if delay > 0 and (time.time() - at < delay):
+            return 0
+    except Exception:
+        pass
+
+    info = collect(with_public_ip=False)
     text = M.shutdown_report(reason=reason or "(không rõ)", hostname=info.hostname,
                              at=f"{datetime.now():%H:%M:%S %d/%m/%Y}")
     try:
