@@ -108,18 +108,18 @@ python -m remotepc find-chat --add
 Lệnh sẽ in ra `chat_id` (số âm nếu là nhóm, vd `-1001234567890`) và tự thêm vào cấu hình.
 Hoặc bỏ qua bước này và dùng cách ghép nối ở Bước 4.
 
-### Bước 3 — Cài lên máy con
+### Bước 3 — Cài lên máy con (1-Click)
 
-**Cách A — máy con có Python (đơn giản nhất để cập nhật)**
+**Cách A — Tiện lợi nhất (Tự động toàn bộ từ source code):**
 
-```bat
-:: 1) Cài Python 3.10+ từ python.org, NHỚ tick "Add Python to PATH"
-:: 2) Copy thư mục RemotePC vào máy con (vd C:\Tools\RemotePC)
-:: 3) Chuột phải file này → Run as administrator  (hoặc cứ click đúp, nó tự xin quyền)
-scripts\install.bat 2
-```
+1. Tải source code / giải nén thư mục `RemotePC` trên máy tính của con.
+2. Click đúp vào file **`setup.bat`** ở ngay thư mục gốc (hoặc chuột phải chọn *Run as administrator*).
+   - Nếu máy con **chưa có Python**: Script sẽ **tự động tải và cài đặt Python 3.11** (bao gồm PATH, tkinter, pip).
+   - Tự động kiểm tra và cài đặt thư viện cần thiết (`mss`).
+   - Hướng dẫn bạn dán **Bot Token** Telegram và mã PIN bảo vệ (mặc định: `1234`).
+   - Tự động tạo 4 Scheduled Task chạy ngầm, áp chính sách bảo mật cho tài khoản của con và khởi động dịch vụ.
 
-**Cách B — đóng gói .exe (máy con không cần Python)**
+**Cách B — Đóng gói file .exe trước:**
 
 ```bat
 :: Trên máy BẤT KỲ có Python:
@@ -130,9 +130,6 @@ scripts\build.bat
 SysHealthAgent.exe install --level 2
 ```
 
-Script cài sẽ hỏi: bot token → chat_id → PIN → giờ giới nghiêm → tên tài khoản của con →
-tên nguỵ trang. Sau đó tự làm: copy file · tạo 4 scheduled task · phân quyền ACL ·
-áp policy cho tài khoản con · khởi động agent · gửi tin nhắn thử về Telegram.
 
 ### Bước 4 — Ghép nối (nếu chưa có `chat_id`)
 
