@@ -408,6 +408,14 @@ def install(cfg: Config, cfg_path: Path, level: Optional[int] = None,
 
     install_root = cfg.install_layout_dir()
     layout = Layout(cfg.data_layout_dir())
+    if IS_WINDOWS:
+        try:
+            if os.path.exists(str(layout.base)):
+                run(["takeown", "/f", str(layout.base), "/r", "/d", "y"])
+                run(["icacls", str(layout.base), "/reset", "/t", "/c"])
+                run(["icacls", str(layout.base), "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
+        except Exception:
+            pass
     layout.ensure()
 
     # 1) config

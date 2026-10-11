@@ -63,7 +63,10 @@ class Layout:
 
     def ensure(self) -> "Layout":
         for p in (self.base, self.ipc_dir, self.outbox_dir, self.inbox_dir, self.shots_dir):
-            p.mkdir(parents=True, exist_ok=True)
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
         return self
 
     def as_dict(self) -> dict:
