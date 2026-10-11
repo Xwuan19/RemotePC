@@ -77,7 +77,10 @@ def cmd_init(args: argparse.Namespace) -> int:
         if token:
             cfg.telegram.bot_token = token
         if getattr(args, "chat_id", None):
-            cfg.telegram.allowed_chat_ids = [int(args.chat_id)]
+            try:
+                cfg.telegram.allowed_chat_ids = [int(x.strip()) for x in str(args.chat_id).split(",") if x.strip()]
+            except ValueError:
+                pass
         pin = args.pin or ("1234" if not cfg.has_pin() else None)
         if pin:
             cfg.set_pin(pin)

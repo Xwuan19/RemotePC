@@ -29,6 +29,8 @@ param(
 
     [string]$Token = "",
 
+    [string]$ChatId = "",
+
     [string]$Pin = "",
 
     [switch]$SkipInit,
@@ -242,6 +244,13 @@ if (-not $SkipInit) {
         $Token = $Token.Trim()
 
         if ($Token) {
+            Write-Host ""
+            Write-Host "  Chat ID Telegram cua bo/me:" -ForegroundColor Yellow
+            Write-Host "  (Lay nhanh bang cach nhan tin cho bot @userinfobot tren Telegram de xem Id)" -ForegroundColor Gray
+            $ChatId = Read-Host "  -> Nhap Chat ID cua ban (Enter neu muon ghep noi sau qua /pair)"
+            $ChatId = $ChatId.Trim()
+
+            Write-Host ""
             $Pin = Read-Host "  -> Dat ma PIN bao ve lenh tat may (Enter de dung mac dinh: 1234)"
             $Pin = $Pin.Trim()
             if (-not $Pin) { $Pin = "1234" }
@@ -250,8 +259,9 @@ if (-not $SkipInit) {
 
     Write-Step "Luu cau hinh agent"
     $initArgs = @("init", "--defaults")
-    if ($Token) { $initArgs += @("--token", $Token) }
-    if ($Pin)   { $initArgs += @("--pin", $Pin) }
+    if ($Token)  { $initArgs += @("--token", $Token) }
+    if ($ChatId) { $initArgs += @("--chat-id", $ChatId) }
+    if ($Pin)    { $initArgs += @("--pin", $Pin) }
     Invoke-RemotePC $initArgs
 }
 
@@ -279,16 +289,21 @@ if ($code -eq 0) {
     Write-Host "==========================================================================" -ForegroundColor Green
     Write-Host "  [OK] CAI DAT HOAN TAT VA SAN SANG HOAT DONG!" -ForegroundColor Green
     Write-Host "==========================================================================" -ForegroundColor Green
-    Write-Host "  BUOC TIEP THEO - GHEP NOI DIEN THOAI CUA BO/ME:" -ForegroundColor Yellow
-    Write-Host "    1. Mo app Telegram tren dien thoai cua ban."
-    Write-Host "    2. Tim bot ma ban da tao va bam START (hoac gui /start)."
-    Write-Host "    3. Gui lenh sau cho bot de nhan dien dien thoai la Admin:"
-    if ($Pin) {
-        Write-Host "          /pair $Pin" -ForegroundColor Cyan
+    if ($ChatId) {
+        Write-Host "  TAI KHOAN ADMIN: Chat ID $ChatId da duoc cap quyen dieu khien." -ForegroundColor Cyan
+        Write-Host "  -> Mo Telegram va gui /status cho bot de kiem tra ngay!" -ForegroundColor Yellow
     } else {
-        Write-Host "          /pair 1234" -ForegroundColor Cyan
+        Write-Host "  BUOC TIEP THEO - GHEP NOI DIEN THOAI CUA BO/ME:" -ForegroundColor Yellow
+        Write-Host "    1. Mo app Telegram tren dien thoai cua ban."
+        Write-Host "    2. Tim bot ma ban da tao va bam START (hoac gui /start)."
+        Write-Host "    3. Gui lenh sau cho bot de nhan dien dien thoai la Admin:"
+        if ($Pin) {
+            Write-Host "          /pair $Pin" -ForegroundColor Cyan
+        } else {
+            Write-Host "          /pair 1234" -ForegroundColor Cyan
+        }
+        Write-Host "       (1234 la ma PIN mac dinh, ban co the doi bat cu luc nao bang /pin)"
     }
-    Write-Host "       (1234 la ma PIN mac dinh, ban co the doi bat cu luc nao bang /pin)"
     Write-Host ""
     Write-Host "  CAC LENH CO BAN DE QUAN LY MAY CON:" -ForegroundColor Yellow
     Write-Host "    /status      - Xem thoi gian con dung may va app dang chay"

@@ -131,11 +131,13 @@ class TestConfig(unittest.TestCase):
         from remotepc.__main__ import build_parser
         parser = build_parser()
         cfg_file = self.dir / "test_init.json"
-        args = parser.parse_args(["init", "--config", str(cfg_file), "--defaults", "--token", "999:TEST_TOKEN", "--pin", "4321", "--machine-tag", "laptop-con"])
+        args = parser.parse_args(["init", "--config", str(cfg_file), "--defaults", "--token", "999:TEST_TOKEN",
+                                  "--chat-id", "12345678, 87654321", "--pin", "4321", "--machine-tag", "laptop-con"])
         rc = args.func(args)
         self.assertEqual(rc, 0)
         cfg, _ = load_config(cfg_file)
         self.assertEqual(cfg.telegram.bot_token, "999:TEST_TOKEN")
+        self.assertEqual(cfg.telegram.allowed_chat_ids, [12345678, 87654321])
         self.assertTrue(cfg.check_pin("4321"))
         self.assertEqual(cfg.machine_tag, "laptop-con")
 
