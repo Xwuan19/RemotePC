@@ -226,10 +226,9 @@ def watchdog_trigger(start: Optional[str] = None) -> str:
       <Enabled>true</Enabled>
       <Repetition>
         <Interval>PT1M</Interval>
-        <Duration>P10675199DT2H48M5.4775807S</Duration>
-        <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
     </TimeTrigger>'''
+
 
 
 def event_trigger(subscription: str) -> str:
@@ -304,20 +303,34 @@ def _apply_acls(cfg: Config, layout: Layout, install_root: Path, children: list[
         notes.append("(Không phải Windows: bỏ qua ACL)")
         return notes
 
-    # 1) Thu muc du lieu: chi SYSTEM + Admin; chan Users (doc/sua/xoa)
+    # 0) Dam bao tat ca thu muc can thiet ton tai truoc khi ap dung ACL
+    for sub in (layout.base, layout.ipc_dir, layout.outbox_dir, layout.inbox_dir, layout.shots_dir):
+        try:
+            sub.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+    ui_dir = install_root / "bin" / "ui"
+    try:
+        ui_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+    # 1) Thu muc du lieu (layout.base):
+    # Chi SYSTEM + Administrators giu toan quyen. Users bi loai khoi DACL (/inheritance:r).
     run(["icacls", str(layout.base), "/inheritance:r",
          "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
-    for acct in (["*S-1-5-32-545"] + children):     # Users + tai khoan con
-        run(["icacls", str(layout.base), "/deny", f"{acct}:(OI)(CI)(R,W,D,RX)"])
-    notes.append(f"Đã khoá {layout.base} (Users không đọc/ghi/xoá được)")
+    for acct in children:     # neu co danh sach tai khoan con, chan them de chac chan
+        if acct:
+            run(["icacls", str(layout.base), "/deny", f"{acct}:(OI)(CI)(R,W,D,RX)"])
+    notes.append(f"Đã khoá {layout.base} (chỉ SYSTEM và Administrators)")
 
-    # 2) ipc: con (uihost) can ghi inbox + doc outbox, nhung khong doc duoc shots
+    # 2) ipc: cho phep Users vao ipc/ de den outbox va inbox
+    run(["icacls", str(layout.ipc_dir), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
     for sub, grants, denies in (
         (layout.outbox_dir, ["*S-1-5-32-545:(OI)(CI)(RX)"], []),
         (layout.inbox_dir, ["*S-1-5-32-545:(OI)(CI)(W,WD,AD,WA)"], ["*S-1-5-32-545:(OI)(CI)(R,D)"]),
         (layout.shots_dir, ["*S-1-5-32-545:(OI)(CI)(W,WD,AD,WA)"], ["*S-1-5-32-545:(OI)(CI)(R,D)"]),
     ):
-        sub.mkdir(parents=True, exist_ok=True)
         run(["icacls", str(sub), "/inheritance:r",
              "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
         for g in grants:
@@ -326,28 +339,30 @@ def _apply_acls(cfg: Config, layout: Layout, install_root: Path, children: list[
             run(["icacls", str(sub), "/deny", d])
     notes.append("Đã phân quyền ipc/ (outbox: chỉ đọc · inbox, shots: chỉ ghi)")
 
-    # 3) Thu muc chuong trinh: bin/ chan Users, bin/ui/ cho phep doc+chay
+    # 3) Thu muc chuong trinh:
     run(["icacls", str(install_root), "/inheritance:r",
          "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
-    run(["icacls", str(install_root / "bin"), "/deny", "*S-1-5-32-545:(OI)(CI)(R,W,D,RX)"])
-    ui_dir = install_root / "bin" / "ui"
-    ui_dir.mkdir(parents=True, exist_ok=True)
     run(["icacls", str(ui_dir), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
     if not is_frozen():
         # uihost chay tu package trong bin\ -> phai cho Users doc package
-        run(["icacls", str(install_root / "bin" / "remotepc"), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
-        run(["icacls", str(install_root / "bin" / "remotepc"), "/deny", "*S-1-5-32-545:(OI)(CI)(W,D)"])
+        run(["icacls", str(install_root / "bin"), "/grant", "*S-1-5-32-545:(RX)"])
+        pkg_dir = install_root / "bin" / "remotepc"
+        if pkg_dir.exists():
+            run(["icacls", str(pkg_dir), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"])
+            run(["icacls", str(pkg_dir), "/deny", "*S-1-5-32-545:(OI)(CI)(W,D)"])
     notes.append(f"Đã khoá {install_root}\\bin (chỉ SYSTEM/Admin)")
 
     # 4) Chan con tac dong vao scheduled task
-    tasks_dir = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "Tasks"
-    for name in task_names(cfg).values():
-        for acct in (["*S-1-5-32-545"] + children):
-            target = tasks_dir / name.replace(" ", "_")
-            for cand in (tasks_dir / name, target):
-                if cand.exists():
-                    run(["icacls", str(cand), "/deny", f"{acct}:(R,W,D,X)"])
-    notes.append("Đã chặn quyền đọc/ghi/xoá trên file scheduled task")
+    if children:
+        tasks_dir = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "Tasks"
+        for name in task_names(cfg).values():
+            for acct in children:
+                if acct:
+                    target = tasks_dir / name.replace(" ", "_")
+                    for cand in (tasks_dir / name, target):
+                        if cand.exists():
+                            run(["icacls", str(cand), "/deny", f"{acct}:(R,W,D,X)"])
+        notes.append("Đã chặn tài khoản con trên file scheduled task")
     return notes
 
 
