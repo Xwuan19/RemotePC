@@ -270,7 +270,7 @@ class TestTaskCommandPaths(unittest.TestCase):
     def test_dev_mode_passes_config_and_subcommand(self):
         cmd, args, wd = installer.program_command(self.cfg, self.root, "run")
         self.assertIn("--config ", args)
-        self.assertIn("C:/ProgramData/SysHealthAgent/config.json", args)
+        self.assertIn("C:/ProgramData/SysHealthAgent/config.json", args.replace("\\", "/"))
         self.assertEqual(wd, str(self.root / "bin"))
         self.assertTrue(cmd.endswith(".exe") or "python" in Path(cmd).name.lower(), cmd)
 
@@ -290,7 +290,7 @@ class TestTaskCommandPaths(unittest.TestCase):
     def test_data_dir_with_spaces_is_quoted(self):
         cfg = _cfg("Sys Health Agent")
         _c, args, _w = installer.program_command(cfg, self.root, "run")
-        self.assertRegex(args, r'--config "C:/ProgramData/Sys Health Agent/config\.json"')
+        self.assertRegex(args.replace("\\", "/"), r'--config "C:/ProgramData/Sys Health Agent/config\.json"')
         xml = installer._task_xml(description="d", command="py", arguments=args,
                                   workdir="w", trigger=installer.BOOT_TRIGGER,
                                   principal=installer.SYSTEM_PRINCIPAL)

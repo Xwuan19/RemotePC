@@ -198,7 +198,16 @@ class TestEndToEnd(unittest.TestCase):
     def tearDown(self):
         for p in self._patches:
             p.stop()
-        self.tmp.cleanup()
+        import logging
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            if isinstance(h, logging.FileHandler):
+                h.close()
+                root.removeHandler(h)
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            pass
 
     def make_agent(self) -> Agent:
         return Agent(self.cfg, self.cfg_path, self.layout, stealth=False)

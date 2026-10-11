@@ -66,16 +66,17 @@ def shutdown(delay: int = 30, message: str = "", force: bool = True, restart: bo
     """Tat (hoac khoi dong lai) may sau `delay` giay."""
     delay = max(0, min(int(delay), 10 * 60 * 60))
     message = (message or "").strip()[:512] or "May se tat theo yeu cau cua bo me."
+    shutdown_bin = os.environ.get("REMOTEPC_SHUTDOWN_BIN") or "shutdown"
     if IS_WINDOWS:
-        args = ["shutdown", "/r" if restart else "/s", "/t", str(delay), "/c", message]
+        args = [shutdown_bin, "/r" if restart else "/s", "/t", str(delay), "/c", message]
         if force:
             args.append("/f")
     elif sys.platform == "darwin":
-        args = ["shutdown", "-r" if restart else "-h", f"+{max(1, delay // 60)}", message]
+        args = [shutdown_bin, "-r" if restart else "-h", f"+{max(1, delay // 60)}", message]
     else:
         # Linux: shutdown can +/- phut; dung delay bang `sleep` neu < 60s
         mins = max(0, round(delay / 60))
-        args = ["shutdown", "-r" if restart else "-h", (f"+{mins}" if mins else "now"), message]
+        args = [shutdown_bin, "-r" if restart else "-h", (f"+{mins}" if mins else "now"), message]
     try:
         p = _popen(args, timeout=30)
         out = ((p.stdout or "") + (p.stderr or "")).strip()
@@ -88,11 +89,12 @@ def shutdown(delay: int = 30, message: str = "", force: bool = True, restart: bo
 
 def abort_shutdown() -> Result:
     """Huy lenh tat may dang dem nguoc (`shutdown /a`)."""
+    shutdown_bin = os.environ.get("REMOTEPC_SHUTDOWN_BIN") or "shutdown"
     try:
         if IS_WINDOWS:
-            p = _popen(["shutdown", "/a"], timeout=15)
+            p = _popen([shutdown_bin, "/a"], timeout=15)
         else:
-            p = _popen(["shutdown", "-c"], timeout=15)
+            p = _popen([shutdown_bin, "-c"], timeout=15)
         out = ((p.stdout or "") + (p.stderr or "")).strip()
         if p.returncode == 0:
             return True, "Da huy lich tat may."
@@ -192,8 +194,10 @@ def message_box(text: str, title: str = "Thông báo từ bố/mẹ", style: str
             t.start()
             time.sleep(min(timeout, 600))
             return True, "Hop thoai da hien (khong tu dong dong duoc)."
-        rc = user32.MessageBoxW(None, text, title, flags)
-        return True, f"Nguoi dung da bam nut (ma {rc})."
+        # timeout=0: hien hop thoai trong thread rieng de khong lam treo vong bot
+        t = threading.Thread(target=user32.MessageBoxW, args=(None, text, title, flags), daemon=True)
+        t.start()
+        return True, "Hop thoai da hien len man hinh."
     except Exception as e:                                      # pragma: no cover
         return False, f"{type(e).__name__}: {e}"
 

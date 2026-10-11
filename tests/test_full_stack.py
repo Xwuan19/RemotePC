@@ -39,6 +39,12 @@ echo "$@" >> "{log}"
 exit 0
 """
 
+FAKE_SHUTDOWN_BAT = """@echo off
+rem Gia lap `shutdown` tren Windows de test khong tat that
+echo %* >> "{log}"
+exit /b 0
+"""
+
 
 class TestFullStack(unittest.TestCase):
     @classmethod
@@ -67,9 +73,13 @@ class TestFullStack(unittest.TestCase):
 
         # `shutdown` gia -> ghi lai tham so de test kiem tra
         self.shutdown_log = self.base / "shutdown-calls.txt"
-        fake = self.bin / "shutdown"
-        fake.write_text(FAKE_SHUTDOWN.format(log=self.shutdown_log), encoding="utf-8")
-        fake.chmod(fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        if sys.platform == "win32":
+            fake = self.bin / "shutdown.cmd"
+            fake.write_text(FAKE_SHUTDOWN_BAT.format(log=self.shutdown_log), encoding="utf-8")
+        else:
+            fake = self.bin / "shutdown"
+            fake.write_text(FAKE_SHUTDOWN.format(log=self.shutdown_log), encoding="utf-8")
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
         self.cfg_path = self.base / "config.json"
         self.cfg_path.write_text(json.dumps({
@@ -97,6 +107,7 @@ class TestFullStack(unittest.TestCase):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(repo_root()) + os.pathsep + env.get("PYTHONPATH", "")
         env["PATH"] = f"{self.bin}{os.pathsep}{env.get('PATH', '')}"
+        env["REMOTEPC_SHUTDOWN_BIN"] = str(fake)
         env.pop("REMOTEPC_CONFIG", None)
         env["REMOTEPC_BOOT_DELAY"] = "0.5"      # khong bat test doi 8 giay moi vong
         self.env = env
