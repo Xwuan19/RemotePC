@@ -27,6 +27,7 @@ shots/
 tasks/
 
 # Test / tooling
+test-report.txt
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

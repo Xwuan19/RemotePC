@@ -347,7 +347,7 @@ python -m remotepc watchdog -v              # chạy 1 vòng watchdog
 python -m remotepc status                   # in trạng thái ra terminal
 ```
 
-**Test** — 185 test, chạy trong ~27 giây, không cần mạng, không cần Windows:
+**Test** — 222 test, chạy trong ~27 giây, không cần mạng, không cần Windows:
 
 ```bash
 python -m unittest discover -s tests -t . -v
@@ -367,10 +367,38 @@ python -m pyflakes remotepc/*.py tests/*.py     # 0 lỗi
 | `test_process_ipc.py` | **Bật `uihost` thành process riêng** → guardian ↔ uihost nói chuyện được thật; và khi scheduled task hỏng thì guardian **tự spawn** uihost vẫn cứu được `/msg` |
 | `test_full_stack.py` | **Bật cả agent thành process riêng** (`python -m remotepc run`) → Telegram thật → lệnh → trả lời; lệnh `shutdown` của hệ điều hành được thay bằng script giả để test không tắt máy |
 | `test_windows_payloads.py` | Phần chỉ chạy trên Windows nhưng vẫn kiểm chứng được ở máy dev: **layout struct ctypes** (`EXPLICIT_ACCESS_W`, `TRUSTEE_W`, `PROCESSENTRY32W`, `MEMORYSTATUSEX`, `LASTINPUTINFO`) phải khớp header MSVC trên cả x86 lẫn x64, và **XML của 4 scheduled task** phải parse được, đúng `Hidden` / `AllowHardTerminate` / `S-1-5-18` / `S-1-5-32-545` / event 1074, escape đúng khi tên nguỵ trang chứa `& < > "`, quote đúng đường dẫn có dấu cách (kể cả bản đóng gói `.exe` trỏ vào `bin\` chứ không phải thư mục build) |
+| `test_windows_live.py` | **Chỉ chạy trên Windows thật** (tự skip ở máy dev): gọi thẳng Win32 để chứng minh — gắn DENY ACE rồi thử `TerminateProcess`/`taskkill /F` và phải *bị từ chối*; `schtasks /create` chấp nhận XML của cả 4 task rồi đọc ngược lại còn nguyên `Hidden`/`AllowHardTerminate`; `icacls` chặn đọc khiến `config.json` ném `PermissionError`; `MessageBoxTimeoutW` hiện hộp thoại thật; chụp màn hình ra ảnh >5 KB; bật `uihost` thành tiến trình thật và đòi ack |
 
 Hai test đa tiến trình tồn tại vì chúng đã bắt được lỗi mà test trong cùng một process
 không thấy: `--config` không được chuyển tiếp xuống tiến trình con, khiến
 UI host ngồi đọc nhầm thư mục và **mọi lệnh `/msg`, `/lock`, `/screenshot` đều treo**.
+
+### Kiểm tra trên một máy Windows thật
+
+Test đơn vị chạy được ở mọi hệ điều hành, nhưng phần quyết định — *con có
+thật sự không End Task được không* — chỉ chứng minh được trên Windows. Vì vậy
+repo có sẵn một bộ chạy một lệnh:
+
+```bat
+scripts\test.bat              :: tự xin quyền Administrator (UAC) rồi chạy cả 3 bước
+scripts\test.bat -SkipLive    :: chỉ test đơn vị, không gọi Win32 thật
+scripts\test.bat -Policy      :: thêm test ghi policy HKCU (rủi ro, xem kế hoạch mục 7)
+```
+
+Ba bước: test đơn vị → test sống trên Windows → `pyflakes`. Xong thì in
+`>>> TAT CA XANH <<<`, exit code 0, và ghi báo cáo đầy đủ ra `test-report.txt`.
+
+Bộ này **không bao giờ tắt máy, không cài đặt, không sửa gì ngoài thư mục
+tạm** — mọi tiến trình dummy, task thử nghiệm (`RemotePCSelfTest\`), ACL thử
+nghiệm đều được dọn trong `addCleanup`, kể cả khi test fail giữa chừng.
+
+| Tài liệu | Dành cho | Nội dung |
+|---|---|---|
+| `AGENTS.md` | AI agent (Antigravity, Copilot, Cursor…) | Quy tắc an toàn, việc cần làm theo thứ tự, các mốc dễ làm hỏng khi sửa code, mẫu báo cáo |
+| `docs/WINDOWS_TEST_PLAN.md` | Người thật + agent | Giải thích từng nhóm test, kết quả mong đợi, và **3 mục thủ công**: cài đặt thật, thử End Task từ tài khoản Standard của con, gỡ cài đặt & khôi phục |
+
+Ba mục thủ công đó cố ý không tự động hoá vì quá xâm lấn: chúng ghi scheduled
+task, đổi ACL và khoá Task Manager của tài khoản con.
 
 **Cấu trúc mã nguồn**
 
@@ -394,6 +422,16 @@ remotepc/
 ├── config.py           Dataclass cấu hình, merge mặc định, băm PIN
 ├── messages.py         Toàn bộ câu chữ tiếng Việt gửi về bot / hiện trên máy con
 └── paths.py            Đường dẫn theo từng hệ điều hành
+
+scripts/
+├── install.bat / .ps1  Cài đặt (tự nâng quyền Administrator)
+├── uninstall.bat / .ps1 Gỡ cài đặt, kể cả khi chủ máy quên PIN
+├── build.bat           Đóng gói thành .exe bằng PyInstaller
+└── test.bat / .ps1     Bộ kiểm tra một lệnh trên Windows
+
+tests/                  222 test — 12 file, xem bảng ở trên
+docs/WINDOWS_TEST_PLAN.md   Kế hoạch kiểm thử chi tiết trên Windows
+AGENTS.md               Hướng dẫn cho AI agent khi clone repo về máy Windows
 ```
 
 ---

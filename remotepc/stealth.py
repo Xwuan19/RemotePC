@@ -129,6 +129,37 @@ _EXPLICIT_ACCESSW = EXPLICIT_ACCESS_W
 ULONG_PTR = ctypes.c_size_t   # pointer-sized: 8 byte tren x64, 4 byte tren x86
 
 
+class ACE_HEADER(ctypes.Structure):
+    """typedef struct _ACE_HEADER (winnt.h) - 4 byte."""
+    _fields_ = [
+        ("AceType", ctypes.c_ubyte),
+        ("AceFlags", ctypes.c_ubyte),
+        ("AceSize", ctypes.c_uint16),
+    ]
+
+
+class ACCESS_DENIED_ACE(ctypes.Structure):
+    """typedef struct _ACCESS_DENIED_ACE (winnt.h)."""
+    _fields_ = [
+        ("Header", ACE_HEADER),
+        ("Mask", DWORD),          # ACCESS_MASK
+        ("SidStart", DWORD),      # offset cua SID trong cung buffer nay
+    ]
+
+
+class ACL_SIZE_INFORMATION(ctypes.Structure):
+    """typedef struct _ACL_SIZE_INFORMATION (accapi.h) - 8 byte."""
+    _fields_ = [
+        ("AclBytesInUse", DWORD),
+        ("AceCount", ctypes.c_uint16),
+        ("AclBytesFree", ctypes.c_uint16),
+    ]
+
+
+ACCESS_ALLOWED_ACE_TYPE = 0
+ACCESS_DENIED_ACE_TYPE = 1
+
+
 class PROCESSENTRY32W(ctypes.Structure):
     """typedef struct tagPROCESSENTRY32W (tlhelp32.h), 568 byte tren x64."""
     _fields_ = [
@@ -496,34 +527,132 @@ def set_process_title(title: str) -> None:
         pass
 
 
-def is_protected(pid: Optional[int] = None, accounts: Iterable[str] = ()) -> bool:
-    """Kiem tra nhanh: tai khoan con co bi chan terminate khong?
+def _configured_win32() -> tuple[Any, Any]:
+    """(kernel32, advapi32) voi prototype da khai bao dung.
 
-    Cach kiem tra: mo process bang quyen TERMINATE tu tai khoan do la khong the
-    tu SYSTEM, nen ta chi kiem tra DACL co ACE DENY hay khong.
+    Bat buoc tren x64: neu khong dat `restype`, ctypes gia su ham tra ve C int
+    (32 bit) va cat mat HANDLE/pointer 64 bit -> OpenProcess tra ve gia tri sai.
+    """
+    kernel32 = ctypes.windll.kernel32                        # type: ignore[attr-defined]
+    advapi32 = ctypes.windll.advapi32                        # type: ignore[attr-defined]
+    if getattr(kernel32, "_rp_configured", False):
+        return kernel32, advapi32
+
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.OpenProcess.argtypes = [DWORD, ctypes.c_int, DWORD]
+    kernel32.CloseHandle.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.GetLastError.restype = DWORD
+
+    advapi32.GetSecurityInfoW.restype = DWORD
+    advapi32.GetSecurityInfoW.argtypes = [
+        ctypes.c_void_p, DWORD, DWORD,
+        ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.GetAclInformation.restype = ctypes.c_int
+    advapi32.GetAclInformation.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, DWORD, DWORD,
+    ]
+    advapi32.GetAce.restype = ctypes.c_int
+    advapi32.GetAce.argtypes = [ctypes.c_void_p, DWORD,
+                                ctypes.POINTER(ctypes.c_void_p)]
+    advapi32.ConvertSidToStringSidW.restype = ctypes.c_int
+    advapi32.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p,
+                                                ctypes.POINTER(ctypes.c_wchar_p)]
+    advapi32.EqualSid.restype = ctypes.c_int
+    advapi32.EqualSid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+    kernel32._rp_configured = True
+    return kernel32, advapi32
+
+
+def _sid_text_at(advapi32: Any, ace_ptr: Any, sid_start: int) -> str:
+    """Doc SID cua mot ACE va tra ve dang chuoi 'S-1-5-...'."""
+    try:
+        sid_ptr = ctypes.c_void_p(int(ace_ptr) + sid_start)
+        out = ctypes.c_wchar_p()
+        if advapi32.ConvertSidToStringSidW(sid_ptr, ctypes.byref(out)) and out.value:
+            text = out.value
+            ctypes.windll.kernel32.LocalFree(out)      # type: ignore[attr-defined]
+            return text
+    except Exception as e:                             # pragma: no cover
+        log.debug("doc SID cua ACE that bai: %s", e)
+    return ""
+
+
+def deny_aces(pid: Optional[int] = None) -> list[dict[str, Any]]:
+    """Liet ke cac ACE DENY co bit PROCESS_TERMINATE trong DACL cua tien trinh.
+
+    Tra ve [] neu khong co (tuc la CHUA duoc bao ve). Ham nay la co so de
+    `is_protected`, `doctor` va test song tren Windows xac nhan that - khong
+    the chi "dem so ACE" vi process nao cung co san ACE mac dinh.
+    """
+    if not IS_WINDOWS:
+        return []
+    pid = pid or os.getpid()
+    kernel32, advapi32 = _configured_win32()
+
+    handle = kernel32.OpenProcess(READ_CONTROL, False, int(pid))
+    if not handle:
+        return []
+    dacl = ctypes.c_void_p()
+    sd = ctypes.c_void_p()
+    try:
+        rc = advapi32.GetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+                                       DACL_SECURITY_INFORMATION, None, None,
+                                       ctypes.byref(dacl), None, ctypes.byref(sd))
+        if rc != 0 or not dacl.value:
+            return []
+
+        info = ACL_SIZE_INFORMATION()
+        # AclSizeInformation = 2; do dai phai dung sizeof(struct) = 8 byte,
+        # neu truyen 2 (nhu ban cu) GetAclInformation that bai/tra ve so lieu sai.
+        if not advapi32.GetAclInformation(dacl, ctypes.byref(info),
+                                          ctypes.sizeof(info), 2):
+            return []
+
+        found: list[dict[str, Any]] = []
+        ace_ptr = ctypes.c_void_p()
+        for i in range(info.AceCount):
+            if not advapi32.GetAce(dacl, i, ctypes.byref(ace_ptr)):
+                continue
+            header = ctypes.cast(ace_ptr, ctypes.POINTER(ACE_HEADER)).contents
+            if header.AceType != ACCESS_DENIED_ACE_TYPE:
+                continue
+            body = ctypes.cast(ace_ptr, ctypes.POINTER(ACCESS_DENIED_ACE)).contents
+            if not body.Mask & PROCESS_TERMINATE:
+                continue
+            found.append({
+                "index": i,
+                "mask": int(body.Mask),
+                "sid": _sid_text_at(advapi32, ace_ptr.value, int(body.SidStart)),
+            })
+        return found
+    finally:
+        if sd.value:
+            kernel32.LocalFree(sd)
+        kernel32.CloseHandle(ctypes.c_void_p(handle))
+
+
+def is_protected(pid: Optional[int] = None, accounts: Iterable[str] = ()) -> bool:
+    """Da gan DENY PROCESS_TERMINATE chua?
+
+    `accounts` (ten hoac SID) chi dung de loc: neu co truyen vao thi doi hoi
+    ACE DENY phai dung cho mot trong cac tai khoan do.
     """
     if not IS_WINDOWS:
         return False
-    pid = pid or os.getpid()
-    advapi32 = ctypes.windll.advapi32                        # type: ignore[attr-defined]
-    kernel32 = ctypes.windll.kernel32                        # type: ignore[attr-defined]
-    handle = kernel32.OpenProcess(READ_CONTROL, False, int(pid))
-    if not handle:
+    aces = deny_aces(pid)
+    if not aces:
         return False
-    try:
-        dacl = ctypes.c_void_p()
-        sd = ctypes.c_void_p()
-        if advapi32.GetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
-                                     DACL_SECURITY_INFORMATION, None, None,
-                                     ctypes.byref(dacl), None, ctypes.byref(sd)) != 0:
-            return False
-        # Dem so ACE; khong parse chi tiet (du de biet da co gan hay chua)
-        count = ctypes.c_ushort(0)
-        try:
-            ok = advapi32.GetAclInformation(dacl, ctypes.byref(count), 2, 2)  # AclRevisionInformation=1, AclSizeInformation=2
-        except Exception:
-            ok = False
-        kernel32.LocalFree(sd)
-        return bool(ok) and count.value > 0
-    finally:
-        kernel32.CloseHandle(ctypes.c_void_p(handle))
+    wanted = [a for a in (accounts or []) if a]
+    if not wanted:
+        return True
+    for acc in wanted:
+        sid = account_sid(acc) or (acc if acc.upper().startswith("S-1-") else "")
+        if sid and any(a.get("sid") == sid for a in aces):
+            return True
+    return False
