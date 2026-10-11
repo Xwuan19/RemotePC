@@ -266,13 +266,27 @@ def _copy_program(install_root: Path, cfg: Config) -> list[str]:
     if not pkg_src.exists():
         pkg_src = Path(__file__).resolve().parent
     pkg_dst = bin_dir / "remotepc"
-    if IS_WINDOWS and pkg_dst.exists():
-        run(["takeown", "/f", str(pkg_dst), "/r", "/d", "y"])
-        run(["icacls", str(pkg_dst), "/reset", "/t", "/c"])
-        run(["icacls", str(pkg_dst), "/grant", "*S-1-5-32-544:(OI)(CI)(F)", "/t", "/c"])
-    if pkg_dst.exists():
-        shutil.rmtree(pkg_dst, ignore_errors=True)
-    shutil.copytree(pkg_src, pkg_dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    if IS_WINDOWS:
+        for tname in ("SysHealthAgent", "SysHealthAgent UI", "SysHealthAgent Watchdog", "SysHealthAgent Telemetry"):
+            run(["schtasks", "/end", "/tn", tname])
+        for p in (install_root, bin_dir, pkg_dst):
+            if p.exists():
+                run(["takeown", "/f", str(p), "/r", "/d", "y"])
+                run(["icacls", str(p), "/remove:d", "*S-1-5-32-545", "/t", "/c"])
+                run(["icacls", str(p), "/grant", "*S-1-5-32-544:(OI)(CI)(F)", "/t", "/c"])
+        run(["robocopy", str(pkg_src), str(pkg_dst), "/E", "/IS", "/IT", "/R:1", "/W:1", "/XD", "__pycache__"])
+        for req_file in ("__main__.py", "main.py", "__init__.py"):
+            src_f = pkg_src / req_file
+            dst_f = pkg_dst / req_file
+            if src_f.exists() and not dst_f.exists():
+                try:
+                    shutil.copy2(src_f, dst_f)
+                except Exception:
+                    pass
+    else:
+        if pkg_dst.exists():
+            shutil.rmtree(pkg_dst, ignore_errors=True)
+        shutil.copytree(pkg_src, pkg_dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     notes.append(f"Đã copy gói `remotepc` → {pkg_dst}")
     for extra in ("requirements.txt",):
         f = repo_root() / extra
@@ -417,6 +431,7 @@ def install(cfg: Config, cfg_path: Path, level: Optional[int] = None,
             try:
                 if os.path.exists(str(target)):
                     run(["takeown", "/f", str(target), "/r", "/d", "y"])
+                    run(["icacls", str(target), "/remove:d", "*S-1-5-32-545", "/t", "/c"])
                     run(["icacls", str(target), "/reset", "/t", "/c"])
                     run(["icacls", str(target), "/grant", "SYSTEM:(OI)(CI)(F)", "/grant", "*S-1-5-32-544:(OI)(CI)(F)"])
             except Exception:

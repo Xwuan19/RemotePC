@@ -216,6 +216,15 @@ if ($exe) {
     # Cai dat thu vien phu thuoc (tu dong cai bat ky thu vien nao thieu)
     try {
         $pyCmd = $Python.Split(" ")[0]
+        # Neu Python nam trong AppData, cap quyen doc cho Users de uihost co the chay trong session cua con
+        if ($pyCmd -match "AppData") {
+            try {
+                $pyDir = Split-Path -Parent (Get-Command $pyCmd -ErrorAction SilentlyContinue).Source
+                if ($pyDir -and (Test-Path $pyDir)) {
+                    icacls $pyDir /grant "*S-1-5-32-545:(OI)(CI)(RX)" /t /c 2>$null | Out-Null
+                }
+            } catch {}
+        }
         $pySubArgs = if ($Python.Split(" ").Length -gt 1) { $Python.Split(" ")[1..($Python.Split(" ").Length - 1)] } else { @() }
         $reqFile = Join-Path $root "requirements.txt"
         if (Test-Path $reqFile) {
@@ -301,11 +310,16 @@ if (-not $SkipInit) {
 # 3. Cai dat tien trinh he thong
 # --------------------------------------------------------------------------- #
 Write-Step "Cai dat agent (muc bao ve $Level)"
+# Dung cac task dang chay de khong bi khoa file khi copy
+foreach ($t in @("SysHealthAgent", "SysHealthAgent UI", "SysHealthAgent Watchdog", "SysHealthAgent Telemetry")) {
+    schtasks /end /tn $t 2>$null | Out-Null
+}
 # Reset quyen tren thu muc du lieu va chuong trinh neu da co tu truoc de tranh vuong DENY cu
 foreach ($target in @("C:\ProgramData\SysHealthAgent", "C:\Program Files\SysHealthAgent")) {
     if (Test-Path $target) {
         try {
             takeown /f $target /r /d y 2>$null | Out-Null
+            icacls $target /remove:d *S-1-5-32-545 /t /c 2>$null | Out-Null
             icacls $target /reset /t /c 2>$null | Out-Null
             icacls $target /grant "SYSTEM:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" 2>$null | Out-Null
         } catch {}
