@@ -72,6 +72,31 @@ def cmd_init(args: argparse.Namespace) -> int:
     cfg, cfg_path = load_config(args.config)
     print(f"\nFile cấu hình sẽ lưu tại: {cfg_path}\n")
 
+    if getattr(args, "defaults", False):
+        token = (args.token or cfg.telegram.bot_token or "").strip()
+        if token:
+            cfg.telegram.bot_token = token
+        if getattr(args, "chat_id", None):
+            cfg.telegram.allowed_chat_ids = [int(args.chat_id)]
+        pin = args.pin or ("1234" if not cfg.has_pin() else None)
+        if pin:
+            cfg.set_pin(pin)
+        if getattr(args, "machine_tag", None):
+            cfg.machine_tag = args.machine_tag
+        if getattr(args, "level", None) is not None:
+            cfg.stealth.level = int(args.level)
+        if not cfg.machine_id:
+            cfg.machine_id = make_machine_id()
+        cfg.data_dir = str(cfg.data_layout_dir())
+        save_config(cfg, cfg_path)
+        print(" ✅ Đã lưu cấu hình (chế độ tự động).")
+        print(f"    - Bot token: {'Đã cấu hình' if cfg.telegram.bot_token else 'Chưa có'}")
+        print("    - PIN: Đã đặt")
+        print(f"    - Chat Admin: {cfg.telegram.allowed_chat_ids or 'Chưa có (ghép nối sau bằng /pair <PIN>)'}")
+        print(f"    - Tag máy: {cfg.machine_tag}")
+        print("=" * 62)
+        return 0
+
     print("1) Tạo bot: nhắn @BotFather trên Telegram → /newbot → copy token.")
     token = args.token or _ask("Bot token", cfg.telegram.bot_token, hidden=True)
     if token:
@@ -508,6 +533,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--token", help="bot token (bỏ qua bước hỏi)")
     sp.add_argument("--chat-id", help="chat_id của bố/mẹ")
     sp.add_argument("--pin", help="PIN bảo vệ")
+    sp.add_argument("--defaults", "-y", "--yes", action="store_true",
+                    help="dùng giá trị mặc định (không hỏi tương tác)")
+    sp.add_argument("--machine-tag", help="tên đại diện của máy")
+    sp.add_argument("--level", type=int, choices=[0, 1, 2], help="mức bảo vệ")
+
 
     sp = add("run", cmd_run, "chạy agent (nền trước mặt)")
     sp.add_argument("--no-stealth", action="store_true", help="không ẩn console, in log ra màn hình")
