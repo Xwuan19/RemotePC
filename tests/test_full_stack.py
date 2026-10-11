@@ -150,8 +150,9 @@ class TestFullStack(unittest.TestCase):
 
     def wait_reply(self, needle: str, timeout: float = REPLY_WAIT) -> bool:
         deadline = time.time() + timeout
+        needle_lower = needle.lower()
         while time.time() < deadline:
-            if needle in self.server.all_text():
+            if needle_lower in self.server.all_text().lower():
                 return True
             if self.proc and self.proc.poll() is not None:
                 return False
@@ -206,7 +207,7 @@ class TestFullStack(unittest.TestCase):
         self.assertTrue(self.wait_reply("MÁY VỪA ĐƯỢC BẬT", timeout=AGENT_STARTUP))
 
         self.server.push('/shutdown 45 --msg "Bo tat may nhe" --pin 1234')
-        self.assertTrue(self.wait_reply("SHUTDOWN", timeout=REPLY_WAIT),
+        self.assertTrue(self.wait_reply("45 giây", timeout=REPLY_WAIT),
                         f"{self.server.all_text()}\n{self.agent_output()}")
         self.assertIn("45 giây", self.server.all_text())
 
@@ -231,7 +232,7 @@ class TestFullStack(unittest.TestCase):
         self.start_agent()
         self.assertTrue(self.wait_reply("MÁY VỪA ĐƯỢC BẬT", timeout=AGENT_STARTUP))
         self.server.push("/lock")
-        self.assertTrue(self.wait_reply("LOCK"), self.server.all_text())
+        self.assertTrue(self.wait_reply("loại bỏ"), self.server.all_text())
 
     def test_warns_when_no_pin_set(self):
         """Chua dat PIN -> agent phai canh bao ro rang, khong im lang."""

@@ -86,7 +86,7 @@ class UIHost:
         if kind == ipc.JOB_MESSAGE:
             ok, detail = actions.message_box(
                 text=str(p.get("text") or ""),
-                title=str(p.get("title") or "Thông báo từ bố/mẹ"),
+                title=str(p.get("title") or "Tao nhắc mày"),
                 style=str(p.get("style") or "warn"),
                 timeout=int(p.get("timeout") or 0),
                 topmost=bool(p.get("topmost", True)),
@@ -95,10 +95,11 @@ class UIHost:
             return ok, {"detail": detail}, ("" if ok else detail)
 
         if kind == ipc.JOB_OVERLAY:
+            dur = p.get("duration") if p.get("duration") is not None else p.get("timeout")
             ok, detail = actions.overlay(
                 text=str(p.get("text") or ""),
                 title=str(p.get("title") or "THÔNG BÁO QUAN TRỌNG"),
-                duration=int(p.get("duration") or 60),
+                duration=int(dur if dur is not None else 60),
                 bg=str(p.get("bg") or "#0b0b0b"),
                 fg=str(p.get("fg") or "#ff5252"),
             )
@@ -123,6 +124,10 @@ class UIHost:
             win = system_info.get_active_window()
             return True, {"window": (win.label() if win else "")}, ""
 
+        if kind == ipc.JOB_APPS:
+            apps = system_info.get_visible_apps()
+            return True, {"apps": apps}, ""
+
         return False, {}, f"Loai job khong ho tro: {kind}"
 
     # ---------------- vong lap ---------------- #
@@ -144,6 +149,11 @@ class UIHost:
                 "pid": (win.pid if win else 0) or 0,
                 "ts": now,
                 "idle": round(system_info.idle_seconds(), 1),
+            })
+            apps = system_info.get_visible_apps()
+            self._write_inbox("apps.json", {
+                "apps": apps,
+                "ts": now,
             })
 
     def run(self, once: bool = False) -> int:
@@ -213,6 +223,14 @@ class InboxReader:
         if time.time() - float(data.get("ts") or 0) > max_age:
             return None
         return data
+
+    def apps(self, max_age: float = 120.0) -> list[dict]:
+        data = self._read("apps.json")
+        if not data:
+            return []
+        if time.time() - float(data.get("ts") or 0) > max_age:
+            return []
+        return list(data.get("apps") or [])
 
     def uihost_alive(self, max_age: float = ALIVE_INTERVAL * 3) -> bool:
         data = self._read("hello.json")

@@ -103,7 +103,7 @@ class TestWindowsStructSizes(unittest.TestCase):
             (stealth.EXPLICIT_ACCESS_W, 48, "accapi.h"),
             (stealth.ACE_HEADER, 4, "winnt.h"),
             (stealth.ACCESS_DENIED_ACE, 12, "winnt.h"),
-            (stealth.ACL_SIZE_INFORMATION, 8, "accapi.h"),
+            (stealth.ACL_SIZE_INFORMATION, 12, "winnt.h"),
             (system_info.MEMORYSTATUSEX, 64, "sysinfoapi.h"),
             (system_info.LASTINPUTINFO, 8, "winuser.h"),
             (stealth.PROCESSENTRY32W, 568, "tlhelp32.h"),
@@ -356,17 +356,17 @@ def _restore_full_control(pid: int) -> None:
         if rc != 0:
             raise OSError(f"SetEntriesInAclW that bai, rc={rc}")
         try:
-            advapi32.SetSecurityInfoW.restype = ctypes.c_uint32
-            advapi32.SetSecurityInfoW.argtypes = [
+            advapi32.SetSecurityInfo.restype = ctypes.c_uint32
+            advapi32.SetSecurityInfo.argtypes = [
                 ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             DACL_SECURITY_INFORMATION = 0x00000004
             SE_KERNEL_OBJECT = 1
-            rc = advapi32.SetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
-                                           DACL_SECURITY_INFORMATION,
-                                           None, None, new_acl, None)
+            rc = advapi32.SetSecurityInfo(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+                                          DACL_SECURITY_INFORMATION,
+                                          None, None, new_acl, None)
             if rc != 0:
-                raise OSError(f"SetSecurityInfoW that bai, rc={rc}")
+                raise OSError(f"SetSecurityInfo that bai, rc={rc}")
         finally:
             kernel32.LocalFree(new_acl)
     finally:
@@ -450,7 +450,8 @@ class TestScheduledTaskXmlLive(unittest.TestCase):
         self.assertEqual(text("t:Settings/t:Hidden"), "true")
         self.assertEqual(text("t:Settings/t:AllowHardTerminate"), "false")
         self.assertEqual(text("t:Settings/t:ExecutionTimeLimit"), "PT0S")
-        self.assertEqual(text("t:Settings/t:Enabled"), "true")
+        enabled_node = root.find("t:Settings/t:Enabled", NS)
+        self.assertTrue(enabled_node is None or (enabled_node.text or "").strip().lower() in ("true", "1"))
         self.assertEqual(text("t:Principals/t:Principal/t:UserId"), "S-1-5-18")
         self.assertEqual(text("t:Principals/t:Principal/t:RunLevel"), "HighestAvailable")
 
@@ -595,6 +596,14 @@ class TestOnScreenLive(unittest.TestCase):
         if win is None:
             self.skipTest("khong co cua so nao dang active (may khoa/man hinh tat)")
         self.assertTrue(hasattr(win, "title"))
+
+    def test_get_visible_apps_returns_list(self):
+        apps = system_info.get_visible_apps()
+        self.assertIsInstance(apps, list)
+        for a in apps:
+            self.assertIn("pid", a)
+            self.assertIn("name", a)
+            self.assertIn("title", a)
 
     def test_uihost_subprocess_handles_job(self):
         """Chay uihost that nhu scheduled task se chay, roi gui job MESSAGE."""

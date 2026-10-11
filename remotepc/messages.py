@@ -33,37 +33,45 @@ def _t(dt: datetime | None = None) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def make_bar(pct: float, length: int = 10) -> str:
+    """Tạo thanh tiến trình khối [▰▰▰▰▱▱▱▱▱▱]."""
+    if pct < 0:
+        return "▱" * length
+    filled = max(0, min(length, round(pct / 100.0 * length)))
+    return "▰" * filled + "▱" * (length - filled)
+
+
 def boot_report(**kw) -> str:
     return (
-        f"{EMOJI['boot']} *MÁY VỪA ĐƯỢC BẬT*\n"
-        f"────────────────\n"
-        f"{EMOJI['pc']} Máy: `{kw.get('hostname','?')}` ({kw.get('tag','pc1')})\n"
-        f"\U0001F464 Người dùng: `{kw.get('user','?')}`\n"
-        f"\U0001F552 Giờ bật: `{kw.get('boot_time','?')}`\n"
-        f"\U0001F310 IP LAN: `{kw.get('lan_ip','?')}`\n"
-        f"\U0001F30D IP công khai: `{kw.get('public_ip','?')}`\n"
-        f"\U0001F5A5️ Windows: `{kw.get('os','?')}`\n"
-        f"────────────────\n"
-        f"Agent đang chạy nền và đã tự bảo vệ."
+        f"🖥 *Remote PC* • `{kw.get('hostname','?')}` (`{kw.get('tag','pc1')}`)\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🟢 *Trạng thái:* _Máy vừa được bật_\n"
+        f"👤 *Người dùng:* `{kw.get('user','?')}`\n"
+        f"🕒 *Giờ bật:* `{kw.get('boot_time','?')}`\n"
+        f"🌐 *IP LAN:* `{kw.get('lan_ip','?')}`\n"
+        f"🌍 *IP công khai:* `{kw.get('public_ip','?')}`\n"
+        f"💻 *Windows:* `{kw.get('os','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🛡️ _Agent đang chạy ngầm và đã tự bảo vệ._"
     )
 
 
 def login_report(**kw) -> str:
     return (
-        f"\U0001F464 *CÓ NGƯỜI ĐĂNG NHẬP*\n"
-        f"Tài khoản: `{kw.get('user','?')}`\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`"
+        f"👤 *Có người đăng nhập* • `{kw.get('hostname','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Tài khoản: `{kw.get('user','?')}` · Lúc: `{kw.get('at','?')}`"
     )
 
 
 def shutdown_report(**kw) -> str:
     return (
-        f"{EMOJI['shutdown']} *MÁY ĐANG TẮT (OFFLINE)*\n"
-        f"────────────────\n"
-        f"Lý do: {kw.get('reason','(không rõ)')}\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`\n"
-        f"────────────────\n"
-        f"⚠️ Máy đã tắt. Mọi lệnh điều khiển tạm dừng cho đến khi con bật máy lại."
+        f"{EMOJI['shutdown']} *Máy đang tắt (offline)* • `{kw.get('hostname','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Lý do: _{kw.get('reason','không rõ')}_\n"
+        f"Thời gian: `{kw.get('at','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚠️ _Máy đã tắt. Mọi lệnh điều khiển tạm dừng cho đến khi nó bật lại._"
     )
 
 
@@ -76,11 +84,12 @@ def heartbeat(**kw) -> str:
 
 def tamper_alert(**kw) -> str:
     return (
-        f"{EMOJI['tamper']} *CẢNH BÁO CAN THIỆP*\n"
+        f"{EMOJI['tamper']} *Cảnh báo can thiệp* • `{kw.get('hostname','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Sự kiện: {kw.get('event','?')}\n"
-        f"Chi tiết: `{kw.get('detail','')}`\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`\n"
-        f"Agent đã tự khôi phục."
+        f"Chi tiết: `{kw.get('detail','')}` · Lúc: `{kw.get('at','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🛡️ _Agent đã tự khôi phục an toàn._"
     )
 
 
@@ -93,46 +102,51 @@ def curfew_warn(**kw) -> str:
     mins = kw.get("minutes", 0)
     end = kw.get("end", "?")
     return (
-        f"{EMOJI['warn']} *SẮP TỚI GIỜ GIỚI NGHIÊM*\n"
-        f"Con còn *{mins} phút* trước {end}.\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`\n"
-        f"Ứng dụng đang mở: `{kw.get('app','?')}`"
+        f"{EMOJI['warn']} *Sắp tới giờ giới nghiêm* • `{kw.get('hostname','?')}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Nó còn *{mins} phút* trước {end}.\n"
+        f"Đang mở: `{kw.get('app','?')}` · Lúc: `{kw.get('at','?')}`"
     )
 
 
 def curfew_start(**kw) -> str:
+    start_t = kw.get('start', '23:00')
     return (
-        f"{EMOJI['moon']} *ĐÃ VÀO GIỜ GIỚI NGHIÊM*\n"
-        f"Khung: {kw.get('window','?')} ({kw.get('start','?')} - {kw.get('end','?')})\n"
-        f"Máy: `{kw.get('hostname','?')}` · Lúc: `{kw.get('at','?')}`\n"
-        f"Đã hiện thông báo trên màn hình của con.\n"
-        f"Ứng dụng đang mở: `{kw.get('app','?')}`"
+        f"⏰ *Đã vào giờ giới nghiêm (nhắc đi ngủ {start_t})* • `{kw.get('hostname','?')}`\n"
+        f"─────────────\n"
+        f"👤 Người dùng: `{kw.get('user','?')}`\n"
+        f"📱 Đang mở: `{kw.get('app','?')}` · Lúc: `{kw.get('at','?')}`\n"
+        f"─────────────\n"
+        f"💬 Máy tính nó đã hiện thông báo nhắc đi ngủ.\n"
+        f"_Nếu nó không xin phép học tiếp, anh có thể bấm nút tắt máy bên dưới:_"
     )
 
 
 def curfew_end(**kw) -> str:
     return (
-        f"{EMOJI['clock']} *HẾT GIỜ GIỚI NGHIÊM*\n"
-        f"Khung {kw.get('window','?')} đã kết thúc lúc `{kw.get('at','?')}`.\n"
+        f"{EMOJI['clock']} *Hết giờ giới nghiêm* • `{kw.get('hostname','?')}`\n"
+        f"─────────────\n"
+        f"Khung *{kw.get('window','?')}* đã kết thúc lúc `{kw.get('at','?')}`.\n"
         f"Hành động: {kw.get('action','không làm gì')}"
     )
 
 
 def curfew_auto_shutdown(**kw) -> str:
     return (
-        f"{EMOJI['shutdown']} *TỰ ĐỘNG TẮT MÁY*\n"
-        f"Con vẫn dùng máy sau giờ giới nghiêm {kw.get('overtime','?')}.\n"
-        f"Máy sẽ tắt sau {kw.get('delay','30')} giây."
+        f"{EMOJI['shutdown']} *Tự động tắt máy*\n"
+        f"─────────────\n"
+        f"Nó vẫn dùng máy sau giờ giới nghiêm {kw.get('overtime','?')}.\n"
+        f"Máy sẽ tắt sau *{kw.get('delay','30')} giây*."
     )
 
 
 DEFAULT_POPUP_CURFEW = (
-    "ĐÃ QUÁ {end}\n\n"
-    "Con hãy tắt máy và đi ngủ nhé.\n"
-    "Bố/mẹ đã nhận được thông báo."
+    "ĐÃ TỚI GIỜ ĐI NGỦ RỒI!\n\n"
+    "Tắt máy đi ngủ nhanh cho tao!\n"
+    "Nếu có bài vở thì gọi bảo tao, không tao tắt máy đấy."
 )
 
-DEFAULT_POPUP_WARN = "Còn {minutes} phút nữa là tới giờ giới nghiêm ({end})."
+DEFAULT_POPUP_WARN = "Còn {minutes} phút nữa là tới giờ giới nghiêm ({end}). Lo mà tắt máy đi!"
 
 
 # --------------------------------------------------------------------------- #
@@ -150,20 +164,22 @@ def cmd_fail(cmd: str, detail: str = "") -> str:
 
 def need_pin(cmd: str) -> str:
     return (
-        f"{EMOJI['lock']} Lệnh `{cmd}` cần mã PIN.\n"
-        f"Cú pháp: `/{cmd} --pin <mã> ...`\n"
-        f"hoặc gửi `/pin <mã>` một lần để mở khoá phiên này."
+        f"{EMOJI['lock']} *Yêu cầu mã PIN*\n"
+        f"Lệnh `/{cmd}` cần mã PIN để thực hiện.\n\n"
+        f"💡 *Cách dùng:*\n"
+        f"• Thêm PIN vào lệnh: `/{cmd} --pin <mã>`\n"
+        f"• Hoặc mở khoá phiên: `/unlock <mã>`"
     )
 
 
 def unknown_command(cmd: str) -> str:
-    return f"{EMOJI['fail']} Không rõ lệnh `/{cmd}`. Gửi `/help` để xem danh sách."
+    return f"{EMOJI['fail']} Không rõ lệnh `/{cmd}`. Gửi `/help` để xem danh sách lệnh."
 
 
 def unauthorized(chat_id: int) -> str:
     return (
         f"{EMOJI['fail']} Chat `{chat_id}` chưa được cấp quyền điều khiển máy này.\n"
-        f"Hãy chạy `remotepc register` trên máy bố/mẹ để lấy chat_id rồi thêm vào config."
+        f"Hãy chạy `remotepc register` trên máy tính để thêm chat này."
     )
 
 
@@ -172,39 +188,37 @@ def machine_offline_hint(tag: str) -> str:
 
 
 HELP_TEXT = """\
-*REMOTE PC — BỘ LỆNH*
+📱 *Remote PC — Bảng lệnh điều khiển*
 _(thêm `@tên_máy` sau lệnh nếu quản lý nhiều máy)_
 
-*Thông báo*
-`/status` — trạng thái máy, uptime, giờ giới nghiêm
-`/log [n]` — n sự kiện gần nhất
-`/apps` — ứng dụng đang chạy / cửa sổ đang mở
-`/screenshot` — chụp màn hình gửi về
+📊 *Theo dõi & Giám sát*
+• `/status` — Trạng thái máy, thời gian bật, giờ giới nghiêm
+• `/performance` — Hiệu năng CPU / RAM / Ổ cứng
+• `/screenshot` — Chụp ảnh màn hình gửi về bot
+• `/apps` — Xem các ứng dụng & cửa sổ đang mở
+• `/log` — Xem nhật ký các sự kiện gần nhất
 
-*Gửi lời nhắn cho con*
-`/msg Con ngủ đi` — hộp thoại thông báo
-`/msg --full Đã quá 12h, tắt máy ngay` — phủ toàn màn hình
-`/msg --title "Bố nói" --style error --timeout 30 ...`
+💬 *Gửi tin nhắn & Nhắc nhở*
+• `/msg <nội dung>` — Hiện hộp thoại thông báo
+• `/msg --full <nội dung>` — Phủ kín toàn màn hình
+• `/msg --timeout 15 <nội dung>` — Tự tắt sau 15 giây
 
-*Điều khiển nguồn*
-`/shutdown [giây] [--msg "..."]` — tắt máy
-`/restart [giây]` — khởi động lại
-`/lock` — khoá màn hình
-`/logoff` — đăng xuất
-`/abort` — huỷ lệnh tắt máy đang đếm ngược
+⚡ *Nguồn & Hẹn giờ*
+• `/timer` — Hẹn giờ tắt máy (chọn nút 15p, 30p, 1h, 23:30...)
+• `/shutdown [thời gian]` — Tắt máy (`/shutdown 30p`, `23:30` hoặc `60`)
+• `/restart [thời gian]` — Khởi động lại máy
+• `/abort` — Huỷ lịch tắt máy đang đếm ngược
+• `/logoff` — Đăng xuất tài khoản
 
-*Giờ giới nghiêm*
-`/curfew` — xem cấu hình hiện tại
-`/curfew on` · `/curfew off`
-`/curfew set 23:30 00:00` — đổi khung giờ
-`/curfew warn 30,10` — đổi các mốc báo trước
-`/curfew action lock` — hành động khi vào giờ (none/notify/popup/lock)
-`/curfew end shutdown` — hành động khi hết giờ (none/notify/lock/logoff/shutdown)
+🌙 *Giờ giới nghiêm*
+• `/curfew` — Xem cài đặt giờ giới nghiêm
+• `/curfew on` · `/curfew off` — Bật / tắt tính năng
+• `/curfew set 23:30 06:00` — Đổi khung giờ cấm
+• `/curfew warn 30,10` — Đổi mốc báo trước (phút)
 
-*Hệ thống*
-`/machines` — danh sách máy đang báo về bot này
-`/config set <khoá> <giá trị>` · `/config show`
-`/pin <mã_cũ> <mã_mới>` — đổi PIN
-`/reload` — nạp lại config
-`/uninstall --pin <mã>` — gỡ agent khỏi máy
+🔒 *Bảo mật & Cấu hình*
+• `/unlock <mã_pin>` — Mở khoá phiên điều khiển
+• `/pin <mã_cũ> <mã_mới>` — Đổi mã PIN bảo vệ
+• `/config show` — Xem toàn bộ cấu hình
+• `/machines` — Danh sách máy đang kết nối
 """

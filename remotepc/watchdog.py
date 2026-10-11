@@ -191,7 +191,7 @@ def run_once(cfg: Config, layout: Layout, verbose: bool = True) -> list[str]:
         if count in (3, 12, 30):
             alert(cfg, "Thành phần hiển thị bị tắt liên tục",
                   f"UI host đã phải khởi động lại {count} lần. "
-                  f"Có thể con đang cố tắt thông báo của bố/mẹ.", state)
+                  f"Có thể nó đang cố tắt thông báo của mày.", state)
     elif not users:
         state.set("uihost_restart", 0)
 

@@ -98,7 +98,7 @@ class TestBoot(MonitorTestBase):
         mon = self.make_monitor()
         mon.tick()
         self.assertIn("boot", self.kinds())
-        self.assertIn("MÁY VỪA ĐƯỢC BẬT", self.texts())
+        self.assertIn("Máy vừa được bật", self.texts())
         self.assertIn("PC-CON", self.texts())
         self.assertIn("Kid", self.texts())
 
@@ -158,7 +158,7 @@ class TestCurfew(MonitorTestBase):
         self.clock.current = datetime(2026, 3, 10, 23, 30, 30)
         mon.tick()
         self.assertIn("curfew_start", self.kinds())
-        self.assertIn("ĐÃ VÀO GIỜ GIỚI NGHIÊM", self.texts())
+        self.assertIn("Đã vào giờ giới nghiêm", self.texts())
         self.assertIn("chrome.exe", self.texts())
 
         self.clock.current = datetime(2026, 3, 11, 0, 0, 30)
@@ -236,7 +236,7 @@ class TestCurfew(MonitorTestBase):
         self.clock.current = datetime(2026, 3, 10, 23, 45, 0)
         text = mon.describe()
         self.assertIn("PC-CON", text)
-        self.assertIn("GIỜ GIỚI NGHIÊM", text)
+        self.assertIn("Giờ giới nghiêm", text)
         self.assertIn("23:30", text)
 
 

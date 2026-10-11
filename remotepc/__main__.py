@@ -41,6 +41,9 @@ def _utf8_stdout() -> None:
             pass
 
 
+_utf8_stdout()
+
+
 def console(text: str) -> str:
     """Bo ky tu dinh dang Markdown khi in ra terminal."""
     return text.replace("*", "").replace("`", "")
@@ -123,7 +126,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             print("      Vẫn lưu cấu hình. Nếu bạn ở nơi chặn Telegram, hãy cài VPN")
             print("      hoặc đặt `telegram.proxy` trong config.json rồi chạy `/reload`.")
 
-    print("\n2) Cấp quyền chat: bố/mẹ hãy nhắn bất kỳ tin nào cho bot, rồi Enter.")
+    print("\n2) Cấp quyền chat: hãy nhắn bất kỳ tin nào cho bot từ Telegram, rồi Enter.")
     if args.chat_id:
         cfg.telegram.allowed_chat_ids = [int(args.chat_id)]
     else:
@@ -133,7 +136,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             print("   Tìm thấy các chat vừa nhắn cho bot:")
             for cid, name in ids:
                 print(f"     - {cid}  ({name})")
-            pick = _ask("   Chọn chat_id của bố/mẹ", str(ids[0][0]))
+            pick = _ask("   Chọn chat_id để điều khiển", str(ids[0][0]))
             try:
                 cfg.telegram.allowed_chat_ids = [int(pick)]
             except ValueError:
@@ -163,7 +166,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                 ",".join(str(x) for x in w.warn_before) or "30,10")
     on_start = _ask("Khi vào giờ thì làm gì? (none/notify/popup/lock)", w.on_start or "popup")
     on_end = _ask("Khi hết giờ thì làm gì? (none/notify/lock/logoff/shutdown)", w.on_end or "notify")
-    auto = _ask("Tự tắt máy nếu con vẫn dùng sau bao nhiêu phút trong giờ cấm? (0 = không)",
+    auto = _ask("Tự tắt máy nếu vẫn dùng sau bao nhiêu phút trong giờ cấm? (0 = không)",
                 str(cfg.curfew.auto_shutdown_after_minutes or 0))
     try:
         from .curfew import parse_hhmm
@@ -187,7 +190,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("\n6) Tên nguỵ trang cho agent (hiện trong Task Manager).")
     cfg.stealth.display_name = _ask("Tên tiến trình", cfg.stealth.display_name or "SysHealthAgent")
     cfg.stealth.uihost_name = cfg.stealth.display_name.replace("Agent", "UI") or "SysHealthUI"
-    level = _ask("Mức bảo vệ: 0=tắt, 1=cơ bản (SYSTEM+tự khởi động), 2=cao (chặn cả Task Manager của con)",
+    level = _ask("Mức bảo vệ: 0=tắt, 1=cơ bản (SYSTEM+tự khởi động), 2=cao (chặn cả Task Manager của máy này)",
                  str(cfg.stealth.level if cfg.stealth.level else 2))
     try:
         cfg.stealth.level = max(0, min(2, int(level)))
@@ -534,7 +537,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("init", cmd_init, "thiết lập ban đầu (hỏi từng bước)")
     sp.add_argument("--token", help="bot token (bỏ qua bước hỏi)")
-    sp.add_argument("--chat-id", help="chat_id của bố/mẹ")
+    sp.add_argument("--chat-id", help="chat_id của người quản lý")
     sp.add_argument("--pin", help="PIN bảo vệ")
     sp.add_argument("--defaults", "-y", "--yes", action="store_true",
                     help="dùng giá trị mặc định (không hỏi tương tác)")
@@ -563,7 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("install", cmd_install, "cài chính thức: SYSTEM + tự bảo vệ + tự khởi động")
     sp.add_argument("--level", type=int, choices=[0, 1, 2], help="0/1/2 mức bảo vệ")
-    sp.add_argument("--child", action="append", help="tài khoản của con (lặp lại nhiều lần)")
+    sp.add_argument("--child", action="append", help="tài khoản bị hạn chế (lặp lại nhiều lần)")
     sp.add_argument("--no-start", action="store_true", help="cài xong không khởi động ngay")
     sp.add_argument("--no-tasks", action="store_true", help="không tạo scheduled task")
 
@@ -587,7 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("popup", cmd_popup, "thử hiện thông báo trên máy này")
     sp.add_argument("text")
     sp.add_argument("--full", action="store_true", help="phủ toàn màn hình")
-    sp.add_argument("--title", default="Thông báo từ bố/mẹ")
+    sp.add_argument("--title", default="Tao nhắc mày")
     sp.add_argument("--style", default="warn")
     sp.add_argument("--timeout", type=int, default=0)
 

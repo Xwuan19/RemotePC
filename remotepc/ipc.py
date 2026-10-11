@@ -36,6 +36,7 @@ JOB_LOCK = "lock"              # khoa man hinh
 JOB_LOGOFF = "logoff"          # dang xuat
 JOB_SCREENSHOT = "screenshot"  # chup man hinh -> shots/
 JOB_FOREGROUND = "foreground"  # bao cua so dang mo
+JOB_APPS = "apps"              # danh sach ung dung co cua so
 JOB_PING = "ping"              # kiem tra uihost con song
 
 

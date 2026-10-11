@@ -184,11 +184,11 @@ class TestPin(AgentTestCase):
 
     def test_lock_needs_no_pin(self):
         out = self.send("/lock")
-        self.assertIn("LOCK", out)
+        self.assertIn("loại bỏ", out)
 
     def test_status_needs_no_pin(self):
         out = self.send("/status")
-        self.assertIn("GIỜ GIỚI NGHIÊM", out)
+        self.assertIn("Giờ giới nghiêm", out)
 
     def test_change_pin(self):
         out = self.send("/pin 1234 5678")
@@ -200,7 +200,7 @@ class TestPin(AgentTestCase):
 class TestCommands(AgentTestCase):
     def test_help(self):
         out = self.send("/help")
-        self.assertIn("REMOTE PC", out)
+        self.assertIn("Remote PC", out)
         self.assertIn("/shutdown", out)
 
     def test_ping(self):
@@ -233,8 +233,7 @@ class TestCommands(AgentTestCase):
 
     def test_lock(self):
         out = self.send("/lock")
-        self.assertIn("LOCK", out)
-        self.assertTrue(self.power_calls)
+        self.assertIn("loại bỏ", out)
 
     def test_shutdown_default_delay(self):
         out = self.send("/shutdown --pin 1234")
@@ -250,6 +249,20 @@ class TestCommands(AgentTestCase):
         self.send("/tat 30 --pin 1234")
         self.assertTrue(self.power_calls)
 
+    def test_timer_menu(self):
+        out = self.send("/timer")
+        self.assertIn("Hẹn giờ tắt máy", out)
+
+    def test_timer_schedule(self):
+        out = self.send("/timer 30p --pin 1234")
+        self.assertIn("SHUTDOWN", out)
+        self.assertEqual(self.power_calls[-1][1]["delay"], 1800)
+
+    def test_shutdown_clock_time(self):
+        out = self.send("/shutdown 23:30 --pin 1234")
+        self.assertIn("SHUTDOWN", out)
+        self.assertGreater(self.power_calls[-1][1]["delay"], 0)
+
     def test_screenshot_no_uihost(self):
         with mock.patch.object(self.agent, "grab_screenshot", return_value=b"\x89PNG-data"):
             self.send("/screenshot")
@@ -263,12 +276,19 @@ class TestCommands(AgentTestCase):
         self.assertIn("thất bại", out)
 
     def test_apps(self):
-        with mock.patch.object(actions, "list_processes", return_value=[
-                {"name": "chrome.exe", "pid": 1, "mem_kb": 500_000},
-                {"name": "game.exe", "pid": 2, "mem_kb": 900_000}]):
+        with mock.patch.object(self.agent, "get_running_apps", return_value=[
+                {"name": "chrome.exe", "pid": 1, "title": "Google Chrome"},
+                {"name": "game.exe", "pid": 2, "title": "Roblox"}]):
             out = self.send("/apps")
         self.assertIn("chrome.exe", out)
         self.assertIn("game.exe", out)
+        self.assertIn("Roblox", out)
+
+    def test_apps_all(self):
+        with mock.patch.object(actions, "list_processes", return_value=[
+                {"name": "svchost.exe", "pid": 100, "mem_kb": 500_000}]):
+            out = self.send("/apps all")
+        self.assertIn("svchost.exe", out)
 
     def test_kill(self):
         with mock.patch.object(actions, "kill_process", return_value=(True, "OK")):
@@ -278,7 +298,7 @@ class TestCommands(AgentTestCase):
     def test_log(self):
         self.send("/ping")
         out = self.send("/log 5")
-        self.assertIn("SỰ KIỆN", out)
+        self.assertIn("sự kiện", out.lower())
 
     def test_machines(self):
         out = self.send("/machines")
@@ -311,7 +331,7 @@ class TestTargeting(AgentTestCase):
 class TestCurfewCommand(AgentTestCase):
     def test_show(self):
         out = self.send("/curfew")
-        self.assertIn("GIỜ GIỚI NGHIÊM", out)
+        self.assertIn("Giờ giới nghiêm", out)
         self.assertIn("23:30", out)
 
     def test_set_window(self):
@@ -382,7 +402,7 @@ class TestUihostRouting(AgentTestCase):
         with mock.patch.object(system_info, "is_session_zero", return_value=True), \
              mock.patch.object(self.agent, "keep_uihost_alive", return_value=True), \
              mock.patch.object(self.agent.queue, "request", return_value=None) as req:
-            self.send("/lock")
+            self.agent.do_action("lock")
         self.assertEqual(req.call_args.args[0], "lock")
 
     def test_shutdown_runs_directly_even_in_session0(self):

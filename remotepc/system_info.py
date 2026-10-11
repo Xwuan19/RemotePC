@@ -65,6 +65,11 @@ class SystemInfo:
     public_ip: str = ""
     cpu_percent: float = -1.0
     mem_percent: float = -1.0
+    mem_used_gb: float = 0.0
+    mem_total_gb: float = 0.0
+    disk_percent: float = -1.0
+    disk_free_gb: float = 0.0
+    disk_total_gb: float = 0.0
     sessions: list[str] = field(default_factory=list)
     is_admin: bool = False
     is_system: bool = False
@@ -82,6 +87,7 @@ if IS_WINDOWS:
     user32 = ctypes.windll.user32            # type: ignore[attr-defined]
     kernel32 = ctypes.windll.kernel32        # type: ignore[attr-defined]
     advapi32 = ctypes.windll.advapi32        # type: ignore[attr-defined]
+    dwmapi = ctypes.windll.dwmapi            # type: ignore[attr-defined]
 
 
 # Struct Win32 dinh nghia o module level, dung type co do rong tuong minh
@@ -151,6 +157,80 @@ def process_name(pid: int) -> str:
     except Exception:
         pass
     return ""
+
+
+def get_visible_apps() -> list[dict[str, Any]]:
+    """Liệt kê các ứng dụng có cửa sổ hiển thị (nhóm Apps trong Task Manager)."""
+    if not IS_WINDOWS:
+        return []
+    try:
+        desk = user32.OpenInputDesktop(0, False, 0x01FF)
+        if desk:
+            user32.SetThreadDesktop(desk)
+    except Exception:
+        pass
+
+    apps: list[dict[str, Any]] = []
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def _enum_cb(hwnd: Any, lp: Any) -> bool:
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length <= 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value.strip()
+            if not title or title == "Program Manager":
+                return True
+
+            cloaked = DWORD(0)
+            DWMWA_CLOAKED = 14
+            dwmapi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, ctypes.byref(cloaked), ctypes.sizeof(cloaked))
+            if cloaked.value != 0:
+                return True
+
+            GWL_EXSTYLE = -20
+            WS_EX_TOOLWINDOW = 0x00000080
+            ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            if ex & WS_EX_TOOLWINDOW:
+                return True
+
+            WS_EX_APPWINDOW = 0x00040000
+            GW_OWNER = 4
+            owner = user32.GetWindow(hwnd, GW_OWNER)
+            if owner and not (ex & WS_EX_APPWINDOW):
+                return True
+
+            pid = DWORD(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            pid_val = int(pid.value)
+            if not pid_val:
+                return True
+
+            for existing in apps:
+                if existing["pid"] == pid_val:
+                    if title not in existing["title"]:
+                        existing["title"] = f"{existing['title']}, {title}"
+                    return True
+
+            pname = process_name(pid_val)
+            apps.append({
+                "pid": pid_val,
+                "name": pname or f"PID-{pid_val}",
+                "title": title,
+            })
+        except Exception as e:
+            log.debug("enum_cb loi: %s", e)
+        return True
+
+    try:
+        user32.EnumWindows(WNDENUMPROC(_enum_cb), 0)
+    except Exception as e:
+        log.debug("EnumWindows loi: %s", e)
+    return apps
 
 
 def idle_seconds() -> float:
@@ -242,6 +322,13 @@ def is_session_zero() -> bool:
     hop thoai len man hinh nguoi dung, phai day qua uihost."""
     if not IS_WINDOWS:
         return False
+    try:
+        sid = ctypes.c_uint32()
+        k32 = getattr(ctypes.windll, "kernel32", None)
+        if k32 and k32.ProcessIdToSessionId(os.getpid(), ctypes.byref(sid)):
+            return sid.value == 0
+    except Exception:
+        pass
     if os.environ.get("SESSIONNAME", "").lower() == "services":
         return True
     return is_system_account()
@@ -306,32 +393,87 @@ def local_accounts() -> list[dict[str, str]]:
     return out
 
 
-def memory_percent() -> float:
-    if not IS_WINDOWS:
-        try:
-            with open("/proc/meminfo") as f:
-                d = {}
-                for line in f:
-                    k, _, v = line.partition(":")
-                    d[k.strip()] = float(v.strip().split()[0])
-            total, avail = d.get("MemTotal", 0), d.get("MemAvailable", 0)
-            return round((total - avail) / total * 100, 1) if total else -1.0
-        except (OSError, ValueError, ZeroDivisionError):
-            return -1.0
+class FILETIME(ctypes.Structure):
+    _fields_ = [("dwLowDateTime", DWORD), ("dwHighDateTime", DWORD)]
 
+
+_last_cpu_times: list[int] = []
+
+
+def cpu_percent() -> float:
+    """Trả về CPU % tức thời hoặc từ lần đo trước."""
+    if not IS_WINDOWS:
+        return -1.0
+    global _last_cpu_times
     try:
-        stat = MEMORYSTATUSEX()
-        stat.dwLength = ctypes.sizeof(stat)
-        if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-            return float(stat.dwMemoryLoad)
+        def to_u64(ft: FILETIME) -> int:
+            return (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+
+        idle, kernel, user = FILETIME(), FILETIME(), FILETIME()
+        if not kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+            return -1.0
+        cur = [to_u64(idle), to_u64(kernel), to_u64(user)]
+        if not _last_cpu_times:
+            _last_cpu_times = cur
+            time.sleep(0.05)
+            if not kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+                return -1.0
+            cur = [to_u64(idle), to_u64(kernel), to_u64(user)]
+
+        idle_diff = cur[0] - _last_cpu_times[0]
+        total_diff = (cur[1] - _last_cpu_times[1]) + (cur[2] - _last_cpu_times[2])
+        _last_cpu_times = cur
+
+        if total_diff > 0:
+            pct = 100.0 * (total_diff - idle_diff) / total_diff
+            return round(max(0.0, min(100.0, pct)), 1)
     except Exception:
         pass
     return -1.0
 
 
+def memory_details() -> tuple[float, float, float]:
+    """Trả về (percent, used_gb, total_gb)."""
+    if not IS_WINDOWS:
+        pct = memory_percent()
+        return pct, 0.0, 0.0
+    try:
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            total_gb = round(stat.ullTotalPhys / (1024**3), 1)
+            avail_gb = round(stat.ullAvailPhys / (1024**3), 1)
+            used_gb = round(total_gb - avail_gb, 1)
+            return float(stat.dwMemoryLoad), used_gb, total_gb
+    except Exception:
+        pass
+    return -1.0, 0.0, 0.0
+
+
+def disk_details(path: str = "C:\\" if IS_WINDOWS else "/") -> tuple[float, float, float]:
+    """Trả về (percent, free_gb, total_gb)."""
+    import shutil
+    try:
+        total, used, free = shutil.disk_usage(path)
+        pct = round(used / total * 100, 1) if total else 0.0
+        free_gb = round(free / (1024**3), 1)
+        total_gb = round(total / (1024**3), 1)
+        return pct, free_gb, total_gb
+    except Exception:
+        return -1.0, 0.0, 0.0
+
+
+def memory_percent() -> float:
+    pct, _, _ = memory_details()
+    return pct
+
+
 def collect(tag: str = "pc1", with_public_ip: bool = True) -> SystemInfo:
     """Lay thong tin may hien tai."""
     up = uptime_seconds()
+    mem_pct, mem_used, mem_total = memory_details()
+    disk_pct, disk_free, disk_total = disk_details()
+    cpu_pct = cpu_percent()
     info = SystemInfo(
         hostname=socket.gethostname(),
         user=", ".join(logged_on_users()) or os.environ.get("USERNAME", "?"),
@@ -341,7 +483,13 @@ def collect(tag: str = "pc1", with_public_ip: bool = True) -> SystemInfo:
         boot_time=time.time() - up if up else time.time(),
         uptime_seconds=up,
         lan_ip=lan_ip(),
-        mem_percent=memory_percent(),
+        cpu_percent=cpu_pct,
+        mem_percent=mem_pct,
+        mem_used_gb=mem_used,
+        mem_total_gb=mem_total,
+        disk_percent=disk_pct,
+        disk_free_gb=disk_free,
+        disk_total_gb=disk_total,
         sessions=active_sessions()[:3],
         is_admin=is_admin(),
         is_system=is_system_account(),

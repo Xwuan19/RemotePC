@@ -24,6 +24,8 @@ $ErrorActionPreference = "Continue"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
 if (-not $Report) { $Report = Join-Path $RepoRoot "test-report.txt" }
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 
 $script:LogLines = New-Object System.Collections.Generic.List[string]
 

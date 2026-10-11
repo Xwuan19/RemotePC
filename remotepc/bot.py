@@ -19,12 +19,12 @@ import sys
 import threading
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from . import actions, ipc, messages as M, system_info
-from .commands import ParsedCommand, format_duration, parse_duration, parse_message
+from .commands import ParsedCommand, format_duration, parse_duration, parse_message, parse_shutdown_spec
 from .config import Config, layout_for, load_config, save_config, set_by_path
 from .curfew import format_min, parse_days, parse_hhmm
 from .monitor import Monitor
@@ -51,16 +51,19 @@ CURFEW_VIEW_SUBS = {"", "show", "xem", "list"}
 
 BOT_COMMAND_MENU = [
     ("status", "Trạng thái máy & giờ giới nghiêm"),
-    ("msg", "Hiện thông báo trên màn hình con"),
-    ("shutdown", "Tắt máy từ xa"),
-    ("restart", "Khởi động lại"),
-    ("lock", "Khoá màn hình"),
-    ("screenshot", "Chụp màn hình gửi về"),
-    ("curfew", "Xem/đổi giờ giới nghiêm"),
-    ("apps", "Ứng dụng đang chạy"),
-    ("log", "Nhật ký sự kiện"),
-    ("abort", "Huỷ lệnh tắt máy"),
-    ("help", "Hướng dẫn"),
+    ("timer", "Hẹn giờ tắt máy (15p, 30p, 1h, 23:30...)"),
+    ("performance", "Hiệu năng CPU / RAM / Ổ cứng"),
+    ("screenshot", "Chụp màn hình gửi về đây"),
+    ("apps", "Ứng dụng & cửa sổ đang mở"),
+    ("curfew", "Xem / chỉnh giờ nhắc đi ngủ"),
+    ("msg", "Gửi thông báo lên màn hình"),
+    ("shutdown", "Tắt máy (đếm ngược)"),
+    ("restart", "Khởi động lại máy"),
+    ("abort", "Huỷ lịch tắt máy"),
+    ("logoff", "Đăng xuất tài khoản"),
+    ("log", "Nhật ký các sự kiện gần nhất"),
+    ("kill", "Tắt cưỡng bức 1 tiến trình"),
+    ("help", "Xem toàn bộ lệnh"),
 ]
 
 
@@ -68,15 +71,139 @@ def make_status_keyboard() -> dict:
     return {
         "inline_keyboard": [
             [
-                {"text": "📊 Trạng thái", "callback_data": "/status"},
+                {"text": "🔄 Cập nhật", "callback_data": "/status"},
                 {"text": "📸 Chụp màn hình", "callback_data": "/screenshot"},
             ],
             [
-                {"text": "🔒 Khoá máy", "callback_data": "/lock"},
+                {"text": "📱 Ứng dụng", "callback_data": "/apps"},
+                {"text": "📊 Hiệu năng", "callback_data": "/performance"},
+            ],
+            [
+                {"text": "⏱ Hẹn giờ tắt", "callback_data": "/timer"},
                 {"text": "🔴 Tắt máy (60s)", "callback_data": "/shutdown 60"},
-            ]
+            ],
+            [
+                {"text": "❌ Huỷ tắt máy", "callback_data": "/abort"},
+            ],
         ]
     }
+
+
+def make_timer_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "⏱ 15 phút", "callback_data": "/shutdown 15m"},
+                {"text": "⏱ 30 phút", "callback_data": "/shutdown 30m"},
+                {"text": "⏱ 45 phút", "callback_data": "/shutdown 45m"},
+            ],
+            [
+                {"text": "⏱ 1 tiếng", "callback_data": "/shutdown 1h"},
+                {"text": "⏱ 2 tiếng", "callback_data": "/shutdown 2h"},
+                {"text": "⏱ 3 tiếng", "callback_data": "/shutdown 3h"},
+            ],
+            [
+                {"text": "🌙 Lúc 23:30", "callback_data": "/shutdown 23:30"},
+                {"text": "🌙 Lúc 00:00", "callback_data": "/shutdown 00:00"},
+                {"text": "🌙 Lúc 00:30", "callback_data": "/shutdown 00:30"},
+            ],
+            [
+                {"text": "🔴 Tắt ngay (60s)", "callback_data": "/shutdown 60"},
+                {"text": "❌ Huỷ tắt máy", "callback_data": "/abort"},
+            ],
+            [
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
+
+def make_timer_active_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "❌ Huỷ tắt máy", "callback_data": "/abort"},
+                {"text": "⏱ Đổi giờ khác", "callback_data": "/timer"},
+            ],
+            [
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
+
+def make_abort_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "⏱ Hẹn giờ lại", "callback_data": "/timer"},
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
+
+def make_apps_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🔄 Cập nhật", "callback_data": "/apps"},
+                {"text": "📸 Chụp màn hình", "callback_data": "/screenshot"},
+            ],
+            [
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
+
+def make_performance_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🔄 Cập nhật", "callback_data": "/performance"},
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
+
+def make_bedtime_keyboard() -> dict:
+    """Nút bấm xử lý nhanh khi có thông báo đã tới giờ đi ngủ."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🔴 Tắt máy ngay (60s)", "callback_data": "/shutdown 60"},
+                {"text": "📸 Chụp màn hình", "callback_data": "/screenshot"},
+            ],
+            [
+                {"text": "📊 Trạng thái", "callback_data": "/status"},
+                {"text": "📱 Ứng dụng", "callback_data": "/apps"},
+            ],
+        ]
+    }
+
+
+def make_curfew_keyboard(enabled: bool, windows: Optional[list] = None) -> dict:
+    """Keyboard inline cho /curfew."""
+    toggle = ("🔴 Tắt nhắc nhở", "/curfew off") if enabled else ("🟢 Bật nhắc nhở", "/curfew on")
+    return {
+        "inline_keyboard": [
+            [{"text": toggle[0], "callback_data": toggle[1]}],
+            [
+                {"text": "🌙 Nhắc lúc 22:30", "callback_data": "/curfew set 22:30 05:00"},
+                {"text": "🌙 Nhắc lúc 23:00", "callback_data": "/curfew set 23:00 05:00"},
+            ],
+            [
+                {"text": "⏰ Sớm hơn 30p", "callback_data": "/curfew shift_start -30"},
+                {"text": "⏰ Muộn hơn 30p", "callback_data": "/curfew shift_start 30"},
+            ],
+            [
+                {"text": "◀️ Về trạng thái", "callback_data": "/status"},
+            ],
+        ]
+    }
+
 
 
 class Agent:
@@ -138,10 +265,10 @@ class Agent:
         if not self.cfg.has_pin():
             log.warning("Chua dat PIN: lenh tat may/go cai dat khong can xac thuc.")
             self.notify(
-                f"{M.EMOJI['warn']} *CHƯA ĐẶT MÃ PIN*\n"
+                f"{M.EMOJI['warn']} *Chưa đặt mã PIN*\n"
                 f"Máy `{self.cfg.machine_tag}` đang cho phép tắt máy / đổi giờ / gỡ tool "
                 f"mà không cần xác thực.\n"
-                f"Ai cầm được điện thoại có chat này là điều khiển được máy con.\n"
+                f"Ai cầm được điện thoại có chat này là điều khiển được máy nó.\n"
                 f"👉 Gửi `/pin <mã 4 số trở lên>` để đặt mã ngay.")
 
         self._threads = [
@@ -203,8 +330,11 @@ class Agent:
         if not chats:
             log.info("[khong co chat_id] %s: %s", kind, text.replace("\n", " | ")[:160])
             return False
-        if reply_markup is None and kind in ("boot", "curfew_warn", "curfew_start"):
-            reply_markup = make_status_keyboard()
+        if reply_markup is None:
+            if kind in ("boot", "curfew_warn"):
+                reply_markup = make_status_keyboard()
+            elif kind == "curfew_start":
+                reply_markup = make_bedtime_keyboard()
         ok_any = False
         for chat_id in chats:
             try:
@@ -227,6 +357,17 @@ class Agent:
               reply_markup: Optional[dict] = None) -> None:
         if not text or not self.tg:
             return
+        # Neu day la callback tu inline button, sua tin nhan truc tiep de khong bi troi chat
+        if upd.raw.get("callback_query") and upd.message_id and hasattr(self.tg, "edit_message_text"):
+            try:
+                res = self.tg.edit_message_text(upd.chat_id, upd.message_id, text,
+                                                parse_mode="Markdown", reply_markup=reply_markup)
+                if res is not None:
+                    return
+            except TelegramError as e:
+                log.debug("edit_message_text that bai (%s), fallback sang sendMessage", e)
+            except Exception:
+                pass
         try:
             self.tg.send_message(upd.chat_id, text, parse_mode="Markdown",
                                  silent=self.cfg.telegram.silent_replies if silent is None else silent,
@@ -355,7 +496,30 @@ class Agent:
             log.exception("handler %s loi", cmd.command)
             answer = M.cmd_fail(cmd.command, f"{type(e).__name__}: {e}")
         if answer:
-            markup = make_status_keyboard() if cmd.command in ("status", "ping", "help") else None
+            if cmd.command in ("status", "ping", "help"):
+                markup = make_status_keyboard()
+            elif cmd.command == "apps":
+                markup = make_apps_keyboard()
+            elif cmd.command == "performance":
+                markup = make_performance_keyboard()
+            elif cmd.command == "timer":
+                pend = self.store.state.pending_shutdown
+                if pend and pend.get("ok") and (pend.get("at", 0) + pend.get("delay", 0) > time.time()) and cmd.args:
+                    markup = make_timer_active_keyboard()
+                else:
+                    markup = make_timer_keyboard()
+            elif cmd.command in ("shutdown", "restart"):
+                pend = self.store.state.pending_shutdown
+                if pend and pend.get("ok") and (pend.get("at", 0) + pend.get("delay", 0) > time.time()):
+                    markup = make_timer_active_keyboard()
+                else:
+                    markup = make_status_keyboard()
+            elif cmd.command == "abort":
+                markup = make_abort_keyboard()
+            elif cmd.command == "curfew":
+                markup = make_curfew_keyboard(self.cfg.curfew.enabled)
+            else:
+                markup = None
             self.reply(upd, answer, reply_markup=markup)
         if self.cfg.notify.on_command and cmd.command not in ("help", "status", "ping"):
             pass  # da tra loi truc tiep, khong gui trung
@@ -363,6 +527,8 @@ class Agent:
     def requires_pin(self, cmd: ParsedCommand) -> bool:
         """Lenh nay co bat buoc xac thuc PIN khong?"""
         if cmd.command in PIN_COMMANDS:
+            return True
+        if cmd.command == "timer" and cmd.args:
             return True
         sub = (cmd.args[0] if cmd.args else "").lower()
         if cmd.command == "curfew":
@@ -376,6 +542,8 @@ class Agent:
             return True                       # chua dat PIN -> khong chan
         given = cmd.options.get("pin") or cmd.options.get("p") or ""
         if given and self.cfg.check_pin(given):
+            self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = time.time() + 365 * 86400 * 10
+            self.store.save()
             return True
         until = float(self.store.state.extra.setdefault("unlocked", {}).get(str(upd.chat_id), 0))
         return until > time.time()
@@ -393,6 +561,8 @@ class Agent:
         if upd.chat_id not in self.cfg.telegram.allowed_chat_ids:
             self.cfg.telegram.allowed_chat_ids.append(int(upd.chat_id))
             save_config(self.cfg, self.cfg_path)
+        self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = time.time() + 365 * 86400 * 10
+        self.store.save()
         self.store.log("pair", chat=upd.chat_id, who=upd.from_name)
         info = system_info.collect(with_public_ip=False)
         self.reply(upd, M.cmd_ok("GHÉP NỐI", (
@@ -472,11 +642,12 @@ class Agent:
             return self._via_uihost(action, **kw)
         if action in ("popup", "overlay"):
             text = str(kw.get("text") or "")
-            title = str(kw.get("title") or "Thông báo từ bố/mẹ")
+            title = str(kw.get("title") or "Tao nhắc mày")
             as_overlay = action == "overlay" or bool(kw.get("overlay"))
             if as_overlay:
+                dur = kw.get("duration") if kw.get("duration") is not None else kw.get("timeout")
                 ok, detail = actions.overlay(text=text, title=title,
-                                             duration=int(kw.get("duration") or kw.get("timeout") or 60))
+                                             duration=int(dur if dur is not None else 0))
             else:
                 ok, detail = actions.message_box(text=text, title=title,
                                                  style=str(kw.get("style") or "warn"),
@@ -528,10 +699,11 @@ class Agent:
         kind = kind_map[action]
         payload: dict[str, Any] = {}
         if kind in (ipc.JOB_MESSAGE, ipc.JOB_OVERLAY):
-            payload = {"text": kw.get("text", ""), "title": kw.get("title", "Thông báo từ bố/mẹ"),
+            dur = kw.get("duration") if kw.get("duration") is not None else kw.get("timeout")
+            payload = {"text": kw.get("text", ""), "title": kw.get("title", "Tao nhắc mày"),
                        "style": kw.get("style", "warn"),
                        "timeout": int(kw.get("timeout") or 0),
-                       "duration": int(kw.get("duration") or kw.get("timeout") or 60),
+                       "duration": int(dur if dur is not None else 0),
                        "topmost": True, "beep": True}
         elif kind == ipc.JOB_SCREENSHOT:
             payload = {"name": f"shot-{int(time.time())}.png"}
@@ -608,6 +780,22 @@ class Agent:
             proc, title = fg.get("process") or "", fg.get("title") or ""
             return f"{proc} — {title}" if proc else title
         return ""
+
+    def get_running_apps(self) -> list[dict[str, Any]]:
+        """Lấy danh sách các ứng dụng có cửa sổ (Apps trong Task Manager)."""
+        if not self.needs_uihost:
+            apps = system_info.get_visible_apps()
+            if apps:
+                return apps
+        apps = self.inbox.apps(max_age=30.0)
+        if apps:
+            return apps
+        if self.needs_uihost:
+            self.keep_uihost_alive(force=True)
+            ack = self.queue.request(ipc.JOB_APPS, {}, timeout=10)
+            if ack and ack.ok and isinstance(ack.result, dict):
+                return list(ack.result.get("apps") or [])
+        return []
 
     def grab_screenshot(self) -> Optional[bytes]:
         """Chup man hinh, tra ve bytes PNG (None neu that bai)."""
@@ -689,25 +877,44 @@ class Agent:
 
     def h_status(self, cmd: ParsedCommand, upd: Update) -> str:
         text = self.monitor.describe()
-        ui = "đang chạy" if (not self.needs_uihost or self.inbox.uihost_alive()) else "KHÔNG chạy"
+
+        ui = "đang chạy" if (not self.needs_uihost or self.inbox.uihost_alive()) else "không chạy"
         prot = "đang bật" if self.cfg.stealth.level >= 2 else ("cơ bản" if self.cfg.stealth.level == 1 else "tắt")
-        extra = (f"\n\n\U0001F6E1️ Bảo vệ: {prot} (mức {self.cfg.stealth.level})"
-                 f"\n\U0001F5A5️ UI host: {ui}"
-                 f"\n\u23F1️ Agent uptime: {format_duration(time.time() - self.store.state.first_run)}")
+        extra_lines = [
+            "",
+            f"🛡️ *Bảo vệ:* {prot} • *UI host:* {ui}",
+        ]
         if not self.cfg.has_pin():
-            extra += ("\n" + M.EMOJI['warn'] + " CHƯA ĐẶT PIN — gửi `/pin <mã>` để bảo vệ "
-                      "các lệnh tắt máy / gỡ tool")
+            extra_lines.append("⚠️ Chưa đặt mã PIN — gửi `/pin <mã>` để khoá các lệnh tắt máy")
+
         pend = self.store.state.pending_shutdown
         if pend and pend.get("ok"):
             left = pend.get("at", 0) + pend.get("delay", 0) - time.time()
             if left > 0:
-                extra += f"\n{M.EMOJI['warn']} Đang đếm ngược tắt máy: còn {int(left)}s (`/abort` để huỷ)"
-        return text + extra
+                from .commands import format_duration
+                target_dt = datetime.fromtimestamp(pend.get("at", 0) + pend.get("delay", 0))
+                extra_lines.append(f"⏱ *Đang hẹn giờ tắt máy:* còn {format_duration(left)} (lúc `{target_dt.strftime('%H:%M:%S')}`) — `/abort` để huỷ")
+
+        extra_lines.append("─────────────")
+        extra_lines.append("_Chạm vào nút bên dưới để thực thi nhanh:_")
+        return text + "\n" + "\n".join(extra_lines)
+
+    def h_performance(self, cmd: ParsedCommand, upd: Update) -> str:
+        return self.monitor.describe_performance()
+
+
 
     def h_msg(self, cmd: ParsedCommand, upd: Update) -> str:
         text = cmd.text
         if not text:
-            return f"{M.EMOJI['fail']} Cú pháp: `/msg [--full] [--title \"...\"] [--timeout 30] nội dung`"
+            return (
+                f"{M.EMOJI['fail']} *Chưa có nội dung lời nhắn*\n\n"
+                f"📝 *Cú pháp:*\n"
+                f"• `/msg <nội dung>` — Hiện hộp thoại thông báo\n"
+                f"• `/msg --full <nội dung>` — Phủ kín toàn màn hình\n"
+                f"• `/msg --timeout 15 <nội dung>` — Tự đóng sau 15 giây\n\n"
+                f"💡 _Ví dụ: `/msg --full Tắt máy đi ngủ nhanh cho tao`_"
+            )
         full = cmd.has_flag("full", "fullscreen", "top")
         style = "warn"
         for f in ("info", "warn", "warning", "error", "critical", "question"):
@@ -715,23 +922,29 @@ class Agent:
                 style = f
                 break
         style = cmd.options.get("style", style)
-        title = cmd.options.get("title") or ("THÔNG BÁO QUAN TRỌNG" if full else "Thông báo từ bố/mẹ")
+        title = cmd.options.get("title") or ("THÔNG BÁO QUAN TRỌNG" if full else "Tao nhắc mày")
         timeout = int(parse_duration(cmd.options.get("timeout", "0")) or 0)
         if full and not timeout:
-            timeout = 0                      # giu den khi con bam "da hieu"
+            timeout = 0                      # giu den khi no bam "da hieu"
         if not full and not timeout:
             timeout = 0
         ok = self.do_action("overlay" if full else "popup", text=text, title=title, style=style,
                             timeout=timeout, duration=timeout, overlay=full)
         detail = (f"Kiểu: {'toàn màn hình' if full else 'hộp thoại'} · Tiêu đề: {title}"
-                  + (f" · Tự đóng sau {timeout}s" if timeout else " · Chờ con bấm OK"))
+                  + (f" · Tự đóng sau {timeout}s" if timeout else " · Chờ nó bấm OK"))
         return (M.cmd_ok("MSG", detail) if ok
                 else M.cmd_fail("MSG", "Không hiện được thông báo. "
                                        "Có thể UI host chưa chạy (thử `/uihost restart`)."))
 
     def h_lock(self, cmd: ParsedCommand, upd: Update) -> str:
-        ok = self.do_action("lock")
-        return M.cmd_ok("LOCK", "Màn hình của con đã bị khoá.") if ok else M.cmd_fail("LOCK")
+        return (
+            f"{M.EMOJI['fail']} *Tính năng khoá máy đã bị loại bỏ*\n"
+            f"Máy tính không cài mật khẩu Windows nên khoá máy không có tác dụng.\n\n"
+            f"💡 *Giải pháp thay thế:*\n"
+            f"• Tắt máy: `/shutdown [giây]`\n"
+            f"• Nhắc nhở / chặn màn hình: `/msg --full <nội dung>`\n"
+            f"• Đăng xuất tài khoản: `/logoff`"
+        )
 
     def h_shutdown(self, cmd: ParsedCommand, upd: Update) -> str:
         return self._power(cmd, restart=False)
@@ -743,32 +956,73 @@ class Agent:
         name = "RESTART" if restart else "SHUTDOWN"
         delay = cmd.first_int(None)
         if delay is None and cmd.args:
-            delay = parse_duration(cmd.args[0])
+            spec_delay, _ = parse_shutdown_spec(cmd.args[0])
+            if spec_delay is not None:
+                delay = spec_delay
         if delay is None:
             delay = self.cfg.power.restart_delay if restart else self.cfg.power.shutdown_delay
-        # Loi nhan: bo cac token dau la con so (delay) khoi phan text tu do,
-        # roi moi den --msg. Khong lam vay thi `/shutdown 45 --msg "..."` se mat loi nhan.
+
         words = cmd.text.split()
-        while words and (words[0].isdigit() or parse_duration(words[0]) is not None):
+        while words and (words[0].isdigit() or parse_shutdown_spec(words[0])[0] is not None):
             words.pop(0)
         message = " ".join(words) or cmd.options.get("msg") or ""
-        message = message or ("Máy sẽ khởi động lại theo yêu cầu của bố/mẹ." if restart
-                              else "Máy sẽ tắt theo yêu cầu của bố/mẹ.")
+        message = message or ("Khoi dong lai may cho tao." if restart
+                              else "Tat may di ngu nhanh cho tao.")
         ok = self.do_action("restart" if restart else "shutdown", delay=delay, message=message,
                             force=self.cfg.power.force_close_apps, reason=f"lệnh /{name.lower()}")
         if ok:
-            return M.cmd_ok(name, f"Máy sẽ {'khởi động lại' if restart else 'tắt'} sau *{delay} giây*.\n"
-                                  f"Lời nhắn hiện trên máy con: “{message}”\n"
-                                  f"Gửi `/abort` để huỷ.")
+            action_vn = "khởi động lại" if restart else "tắt"
+            if delay < 60:
+                time_info = f"sau *{delay} giây*"
+            else:
+                target_dt = datetime.now() + timedelta(seconds=delay)
+                time_info = f"sau *{delay} giây* ({format_duration(delay)}, lúc `{target_dt.strftime('%H:%M:%S')}`)"
+            return (
+                f"⏱ *ĐÃ ĐẶT LỊCH {name}*\n"
+                f"─────────────\n"
+                f"Máy sẽ {action_vn} {time_info}.\n"
+                f"Lời nhắn hiện trên máy nó: “{message}”\n"
+                f"─────────────\n"
+                f"_Gửi `/abort` hoặc bấm nút bên dưới để huỷ._"
+            )
         return M.cmd_fail(name, "Windows từ chối lệnh. Thử `/status` để kiểm tra.")
+
+    def h_timer(self, cmd: ParsedCommand, upd: Update) -> str:
+        if cmd.args:
+            return self._power(cmd, restart=False)
+        pend = self.store.state.pending_shutdown
+        if pend and pend.get("ok"):
+            left = pend.get("at", 0) + pend.get("delay", 0) - time.time()
+            if left > 0:
+                target_dt = datetime.fromtimestamp(pend.get("at", 0) + pend.get("delay", 0))
+                return (
+                    f"⏱ *Đang có lịch hẹn tắt máy*\n"
+                    f"─────────────\n"
+                    f"Thời gian còn lại: *{format_duration(left)}* (lúc `{target_dt.strftime('%H:%M:%S')}`)\n"
+                    f"─────────────\n"
+                    f"Bấm *[ ❌ Huỷ tắt máy ]* bên dưới nếu muốn huỷ, hoặc chọn giờ mới để đặt lại:"
+                )
+        info = system_info.collect(with_public_ip=False)
+        return (
+            f"⏱ *Hẹn giờ tắt máy* • `{info.hostname}`\n"
+            f"─────────────\n"
+            f"Chọn nhanh mốc thời gian hẹn giờ tắt bên dưới:\n"
+            f"_Hoặc gõ: `/shutdown 30p`, `/shutdown 1h`, `/shutdown 23:30`_"
+        )
 
     def h_abort(self, cmd: ParsedCommand, upd: Update) -> str:
         ok = self.do_action("abort")
-        return M.cmd_ok("ABORT", "Đã huỷ lịch tắt máy.") if ok else M.cmd_fail("ABORT", "Không có lịch nào đang chạy.")
+        if ok:
+            return (
+                "✅ *ĐÃ HUỶ LỊCH TẮT MÁY (ABORT)*\n"
+                "─────────────\n"
+                "Lịch hẹn giờ tắt máy đã được huỷ bỏ an toàn."
+            )
+        return M.cmd_fail("ABORT", "Không có lịch hẹn tắt máy nào đang chạy.")
 
     def h_logoff(self, cmd: ParsedCommand, upd: Update) -> str:
         ok = self.do_action("logoff")
-        return M.cmd_ok("LOGOFF", "Đã đăng xuất phiên của con.") if ok else M.cmd_fail("LOGOFF")
+        return M.cmd_ok("LOGOFF", "Đã đăng xuất phiên của nó.") if ok else M.cmd_fail("LOGOFF")
 
     def h_screenshot(self, cmd: ParsedCommand, upd: Update) -> str:
         blob = self.grab_screenshot()
@@ -785,24 +1039,52 @@ class Agent:
         return ""    # da gui anh, khong can text
 
     def h_apps(self, cmd: ParsedCommand, upd: Update) -> str:
+        show_all = "--all" in cmd.options or "--all" in cmd.flags or bool(cmd.args and cmd.args[0].lower() in ("all", "tatca", "--all"))
+        if not show_all:
+            apps = self.get_running_apps()
+            if apps:
+                lines = [f"{M.EMOJI['pc']} *Các ứng dụng đang mở ({len(apps)})*"]
+                for a in apps:
+                    title_part = f" — _{a['title']}_" if a.get("title") else ""
+                    lines.append(f"• *{a['name']}* (PID {a['pid']}){title_part}")
+                cur = self.current_app()
+                if cur:
+                    lines.append(f"\n🎯 Đang dùng: `{cur}`")
+                lines.append(f"⏱️ Hôm nay nó dùng máy: {format_duration(self.monitor.usage_today())}")
+                return "\n".join(lines)
+            elif self.needs_uihost or IS_WINDOWS:
+                lines = [f"{M.EMOJI['pc']} *Không có ứng dụng nào đang mở trên màn hình.*"]
+                cur = self.current_app()
+                if cur:
+                    lines.append(f"\n🎯 Đang dùng: `{cur}`")
+                lines.append(f"\n⏱️ Hôm nay nó dùng máy: {format_duration(self.monitor.usage_today())}")
+                lines.append("\n💡 _Gửi `/apps all` để xem các tiến trình chạy ngầm._")
+                return "\n".join(lines)
+
         top = cmd.first_int(15) or 15
         rows = actions.list_processes(top=top)
         if not rows:
             return M.cmd_fail("APPS", "Không đọc được danh sách tiến trình.")
-        lines = [f"{M.EMOJI['pc']} *{top} TIẾN TRÌNH NẶNG NHẤT* (theo RAM)", "```"]
+        lines = [f"{M.EMOJI['pc']} *Top {top} tiến trình dùng nhiều RAM nhất*", "```"]
         for r in rows:
             lines.append(f"{r['name'][:28]:<28} {r['pid']:>6}  {r.get('mem_kb',0)//1024:>5} MB")
         lines.append("```")
         cur = self.current_app()
         if cur:
-            lines.append(f"\n\U0001F3AF Đang mở: `{cur}`")
-        lines.append(f"\n\u23F1️ Hôm nay con dùng máy: {format_duration(self.monitor.usage_today())}")
+            lines.append(f"\n🎯 Đang dùng: `{cur}`")
+        lines.append(f"\n⏱️ Hôm nay nó dùng máy: {format_duration(self.monitor.usage_today())}")
         return "\n".join(lines)
 
     def h_kill(self, cmd: ParsedCommand, upd: Update) -> str:
         target = cmd.args[0] if cmd.args else ""
         if not target:
-            return f"{M.EMOJI['fail']} Cú pháp: `/kill ten_ung_dung.exe` hoặc `/kill 1234`"
+            return (
+                f"{M.EMOJI['fail']} *Chưa chọn ứng dụng cần tắt*\n\n"
+                f"📝 *Cú pháp:*\n"
+                f"• `/kill ten_ung_dung.exe` — Tắt theo tên file\n"
+                f"• `/kill 1234` — Tắt theo mã PID\n\n"
+                f"💡 _Ví dụ: `/kill roblox.exe`_"
+            )
         ok, detail = actions.kill_process(target, force=True)
         return (M.cmd_ok("KILL", f"Đã tắt `{target}`.") if ok
                 else M.cmd_fail("KILL", detail or f"Không tắt được `{target}`."))
@@ -812,7 +1094,7 @@ class Agent:
         events = self.store.events.tail(n)
         if not events:
             return "Nhật ký còn trống."
-        lines = [f"\U0001F4DC *{len(events)} SỰ KIỆN GẦN NHẤT*", "```"]
+        lines = [f"\U0001F4DC *{len(events)} sự kiện gần nhất*", "```"]
         for e in events:
             ts = datetime.fromtimestamp(e.get("ts", 0)).strftime("%d/%m %H:%M:%S")
             kind = str(e.get("kind", "?"))[:16]
@@ -825,7 +1107,7 @@ class Agent:
     def h_machines(self, cmd: ParsedCommand, upd: Update) -> str:
         info = system_info.collect(with_public_ip=False)
         state = self.store.state
-        return (f"{M.EMOJI['pc']} *MÁY NÀY*\n"
+        return (f"{M.EMOJI['pc']} *Thông tin máy tính này*\n"
                 f"Tag: `{self.cfg.machine_tag}`\n"
                 f"Hostname: `{info.hostname}`\n"
                 f"ID: `{self.cfg.machine_id}`\n"
@@ -843,11 +1125,10 @@ class Agent:
 
     def h_pin(self, cmd: ParsedCommand, upd: Update) -> str:
         args = [a for a in cmd.args if a]
-        if cmd.command == "pin" and len(args) == 1 and self.cfg.has_pin() and self.cfg.check_pin(args[0]):
-            until = time.time() + PIN_SESSION_MINUTES * 60
-            self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = until
+        if cmd.command in ("pin", "unlock") and len(args) == 1 and self.cfg.has_pin() and self.cfg.check_pin(args[0]):
+            self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = time.time() + 365 * 86400 * 10
             self.store.save()
-            return M.cmd_ok("UNLOCK", f"Mã PIN chính xác! Đã mở khoá {PIN_SESSION_MINUTES} phút cho chat này.")
+            return M.cmd_ok("UNLOCK", "Mã PIN chính xác! Đã mở khoá quyền điều khiển cho chat này (không cần nhập lại nữa).")
         if cmd.command == "pin" and len(args) >= 1:
             old, new = (args + [""])[:2]
             if not self.cfg.has_pin():
@@ -855,24 +1136,25 @@ class Agent:
             elif not self.cfg.check_pin(old):
                 return M.cmd_fail("PIN", "Mã PIN cũ không đúng.")
             if len(new) < 4:
-                return M.cmd_fail("PIN", "Cú pháp: `/pin <mã_cũ> <mã_mới>` (PIN mới cần ít nhất 4 ký tự).\nHoặc nếu muốn mở khoá: `/unlock <mã>`.")
+                return M.cmd_fail("PIN", "Mã PIN mới cần ít nhất 4 ký tự.\n\n📝 *Cú pháp:* `/pin <mã_cũ> <mã_mới>`")
             self.cfg.set_pin(new)
             save_config(self.cfg, self.cfg_path)
+            self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = time.time() + 365 * 86400 * 10
+            self.store.save()
             self.store.log("pin_changed", chat=upd.chat_id)
-            return M.cmd_ok("PIN", "Đã đổi mã PIN.")
+            return M.cmd_ok("PIN", "Đã đổi mã PIN thành công.")
         if cmd.command == "unlock":
             token = args[0] if args else ""
             if self.cfg.check_pin(token):
-                until = time.time() + PIN_SESSION_MINUTES * 60
-                self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = until
+                self.store.state.extra.setdefault("unlocked", {})[str(upd.chat_id)] = time.time() + 365 * 86400 * 10
                 self.store.save()
-                return M.cmd_ok("UNLOCK", f"Đã mở khoá {PIN_SESSION_MINUTES} phút cho chat này.")
+                return M.cmd_ok("UNLOCK", "Mã PIN chính xác! Đã mở khoá quyền điều khiển cho chat này (không cần nhập lại nữa).")
             return M.cmd_fail("UNLOCK", "Sai mã PIN.")
-        return (f"{M.EMOJI['lock']} *PIN*\n"
-                f"`/unlock <mã>` — mở khoá 15 phút cho chat này\n"
-                f"`/pin <mã_cũ> <mã_mới>` — đổi mã\n"
-                f"Lệnh cần PIN: {', '.join(sorted(PIN_COMMANDS))}\n"
-                f"Cũng có thể thêm `--pin <mã>` vào cuối lệnh.")
+        return (f"{M.EMOJI['lock']} *Quản lý mã PIN*\n\n"
+                f"💡 *Cách dùng:*\n"
+                f"• `/unlock <mã_pin>` — Xác thực mã PIN một lần duy nhất\n"
+                f"• `/pin <mã_cũ> <mã_mới>` — Đổi sang mã PIN mới\n\n"
+                f"_Các lệnh cần PIN: {', '.join(sorted(PIN_COMMANDS))}_")
 
     def h_unlock(self, cmd: ParsedCommand, upd: Update) -> str:
         return self.h_pin(cmd, upd)
@@ -919,7 +1201,7 @@ class Agent:
 
     def h_uninstall(self, cmd: ParsedCommand, upd: Update) -> str:
         from .installer import uninstall
-        self.notify(f"{M.EMOJI['warn']} Bố/mẹ vừa ra lệnh GỠ agent khỏi `{self.cfg.machine_tag}`.")
+        self.notify(f"{M.EMOJI['warn']} Vừa có lệnh GỠ agent khỏi `{self.cfg.machine_tag}`.")
         ok, detail = uninstall(self.cfg, self.cfg_path, self.layout, purge=True)
         if ok:
             self.stop("uninstall")
@@ -930,6 +1212,7 @@ class Agent:
         "help": h_help, "start": h_help, "ping": h_ping, "status": h_status,
         "msg": h_msg, "lock": h_lock, "shutdown": h_shutdown, "restart": h_restart,
         "abort": h_abort, "logoff": h_logoff, "screenshot": h_screenshot, "apps": h_apps,
+        "performance": h_performance, "timer": h_timer,
         "kill": h_kill, "log": h_log, "machines": h_machines, "curfew": h_curfew,
         "config": h_config, "pin": h_pin, "unlock": h_unlock, "reload": h_reload,
         "protect": h_protect, "uihost": h_uihost, "uninstall": h_uninstall,
@@ -948,21 +1231,26 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
 
     def dump() -> str:
         eng = agent.monitor.engine
-        lines = [f"{M.EMOJI['clock']} *GIỜ GIỚI NGHIÊM*: " + ("BẬT" if cur.enabled else "TẮT")]
+        status = "🟢 *Bật*" if cur.enabled else "🔴 *Tắt*"
+        lines = [f"⏰ *Giờ giới nghiêm:* {status}", "─────────────"]
         for i, w in enumerate(eng.windows, 1):
             lines.append(
-                f"\n*{i}. {w.name}* — `{format_min(w.start)}` → `{format_min(w.end)}`"
-                + (" (qua nửa đêm)" if w.crosses_midnight else "")
-                + f"\n   Áp dụng: {'mọi ngày' if not w.days else ', '.join(_DAY_VN[d] for d in sorted(w.days))}"
+                f"*{i}. {w.name}*: `{format_min(w.start)}` → `{format_min(w.end)}`"
+                + (" _(qua nửa đêm)_" if w.crosses_midnight else "")
                 + f"\n   Báo trước: {', '.join(str(m) + ' phút' for m in w.warn_before) or 'không'}"
-                + f"\n   Khi vào giờ: `{w.on_start}` · Khi hết giờ: `{w.on_end}`"
+                + f"\n   Vào giờ: `{w.on_start}` · Hết giờ: `{w.on_end}`"
             )
-        lines.append(f"\nTự tắt máy sau {cur.auto_shutdown_after_minutes} phút trong giờ cấm"
-                     if cur.auto_shutdown_after_minutes else "\nKhông tự tắt máy.")
-        lines.append("\n*Cách đổi:* `/curfew set 23:30 00:00` · `/curfew warn 30,10` · "
-                     "`/curfew action popup` · `/curfew end shutdown` · `/curfew on|off`")
+        if cur.auto_shutdown_after_minutes:
+            lines.append(f"\n_Tự tắt máy sau {cur.auto_shutdown_after_minutes} phút trong giờ cấm._")
         lines.append("\n" + eng.describe(datetime.now()))
+        lines.append("─────────────")
+        lines.append("_Dùng nút bên dưới để thay đổi nhanh:_")
         return "\n".join(lines)
+
+    def _windows_as_dicts() -> list:
+        return [{"name": w.name, "start": format_min(w.start), "end": format_min(w.end),
+                 "on_start": w.on_start, "on_end": w.on_end}
+                for w in agent.monitor.engine.windows]
 
     if not sub or sub in ("show", "xem", "list"):
         return dump()
@@ -974,7 +1262,11 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
     elif sub in ("set", "dat"):
         rest = cmd.args[1:]
         if len(rest) < 2:
-            return f"{M.EMOJI['fail']} Cú pháp: `/curfew set 23:30 00:00 [tên khung]`"
+            return (
+                f"{M.EMOJI['fail']} *Chưa đúng định dạng giờ giới nghiêm*\n\n"
+                f"📝 *Cú pháp:* `/curfew set <bắt_đầu> <kết_thúc> [tên_khung]`\n\n"
+                f"💡 _Ví dụ: `/curfew set 23:30 06:00 Giờ ngủ`_"
+            )
         try:
             start_s = format_min(parse_hhmm(rest[0]))
             end_s = format_min(parse_hhmm(rest[1]))
@@ -984,12 +1276,36 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
         w.start, w.end = start_s, end_s
         if len(rest) >= 3:
             w.name = rest[2]
+    elif sub in ("shift_start", "shift", "lui_start", "tien_start"):
+        w = _target_window(cur, cmd)
+        raw_val = cmd.args[1] if len(cmd.args) > 1 else "30"
+        try:
+            delta = int(raw_val)
+        except ValueError:
+            delta = 30
+        cur_m = parse_hhmm(w.start)
+        new_m = (cur_m + delta) % 1440
+        w.start = format_min(new_m)
+    elif sub in ("shift_end", "lui_end", "tien_end"):
+        w = _target_window(cur, cmd)
+        raw_val = cmd.args[1] if len(cmd.args) > 1 else "30"
+        try:
+            delta = int(raw_val)
+        except ValueError:
+            delta = 30
+        cur_m = parse_hhmm(w.end)
+        new_m = (cur_m + delta) % 1440
+        w.end = format_min(new_m)
     elif sub in ("warn", "bao"):
         w = _target_window(cur, cmd)
         raw = cmd.args[1] if len(cmd.args) > 1 else ""
         mins = {int(x) for x in raw.replace(";", ",").split(",") if x.strip().isdigit()}
         if not mins:
-            return f"{M.EMOJI['fail']} Cú pháp: `/curfew warn 30,10` (số phút báo trước)."
+            return (
+                f"{M.EMOJI['fail']} *Chưa nhập số phút báo trước*\n\n"
+                f"📝 *Cú pháp:* `/curfew warn <các_mốc_phút>`\n\n"
+                f"💡 _Ví dụ: `/curfew warn 30,10` (nhắc trước 30p và 10p)_"
+            )
         w.warn_before_minutes = sorted(mins)
     elif sub in ("days", "thu"):
         w = _target_window(cur, cmd)
@@ -1001,12 +1317,20 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
     elif sub in ("action", "start", "vao"):
         val = (cmd.args[1] if len(cmd.args) > 1 else "").lower()
         if val not in ("none", "notify", "popup", "lock"):
-            return f"{M.EMOJI['fail']} Chọn: none / notify / popup / lock"
+            return (
+                f"{M.EMOJI['fail']} *Hành động không hợp lệ*\n\n"
+                f"💡 *Các tuỳ chọn:* `none`, `notify`, `popup`, `lock`\n"
+                f"_Ví dụ: `/curfew action lock`_"
+            )
         _target_window(cur, cmd).on_start = val
     elif sub in ("end", "het"):
         val = (cmd.args[1] if len(cmd.args) > 1 else "").lower()
         if val not in ("none", "notify", "lock", "logoff", "shutdown"):
-            return f"{M.EMOJI['fail']} Chọn: none / notify / lock / logoff / shutdown"
+            return (
+                f"{M.EMOJI['fail']} *Hành động không hợp lệ*\n\n"
+                f"💡 *Các tuỳ chọn:* `none`, `notify`, `lock`, `logoff`, `shutdown`\n"
+                f"_Ví dụ: `/curfew end shutdown`_"
+            )
         _target_window(cur, cmd).on_end = val
     elif sub in ("text", "loinhan"):
         w = _target_window(cur, cmd)
@@ -1019,7 +1343,11 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
     elif sub in ("add", "them"):
         rest = cmd.args[1:]
         if len(rest) < 2:
-            return f"{M.EMOJI['fail']} Cú pháp: `/curfew add 13:00 14:00 Trưa`"
+            return (
+                f"{M.EMOJI['fail']} *Thiếu thông tin khung giờ*\n\n"
+                f"📝 *Cú pháp:* `/curfew add <bắt_đầu> <kết_thúc> <tên_khung>`\n\n"
+                f"💡 _Ví dụ: `/curfew add 12:30 14:00 Nghỉ trưa`_"
+            )
         try:
             start_s = format_min(parse_hhmm(rest[0]))
             end_s = format_min(parse_hhmm(rest[1]))
@@ -1035,9 +1363,9 @@ def curfew_command(agent: Agent, cmd: ParsedCommand) -> str:
             agent.monitor.reload_config(cfg)
             save_config(cfg, agent.cfg_path)
             return M.cmd_ok("CURFEW", f"Đã xoá khung `{removed.name}`.")
-        return f"{M.EMOJI['fail']} Ghi số thứ tự khung cần xoá (1..{len(cur.windows)})."
+        return f"{M.EMOJI['fail']} Vui lòng nhập số thứ tự khung cần xoá (1 đến {len(cur.windows)})."
     else:
-        return f"{M.EMOJI['fail']} Không rõ `/curfew {sub}`.\n" + dump()
+        return f"{M.EMOJI['fail']} Không tìm thấy lệnh `/curfew {sub}`.\n\n" + dump()
 
     # dong bo xuong config + engine
     _sync_curfew(cfg)
@@ -1103,10 +1431,14 @@ def config_command(agent: Agent, cmd: ParsedCommand) -> str:
                 data[k] = "***" if data[k] else ""
         data["telegram"]["bot_token"] = _mask(cfg.telegram.bot_token)
         body = json.dumps(data, ensure_ascii=False, indent=1)
-        return f"\u2699️ *CONFIG* (`{agent.cfg_path}`)\n```json\n{body}\n```"
+        return f"⚙️ *Cấu hình hiện tại* (`{agent.cfg_path}`)\n```json\n{body}\n```"
     if sub in ("set", "dat"):
         if len(cmd.args) < 3:
-            return f"{M.EMOJI['fail']} Cú pháp: `/config set curfew.enabled false`"
+            return (
+                f"{M.EMOJI['fail']} *Chưa đúng định dạng cấu hình*\n\n"
+                f"📝 *Cú pháp:* `/config set <khoá> <giá_trị>`\n\n"
+                f"💡 _Ví dụ: `/config set curfew.enabled false`_"
+            )
         key, value = cmd.args[1], " ".join(cmd.args[2:])
         try:
             msg = set_by_path(cfg, key, value)
@@ -1118,7 +1450,14 @@ def config_command(agent: Agent, cmd: ParsedCommand) -> str:
         return M.cmd_ok("CONFIG", msg)
     if sub in ("path", "duongdan"):
         return f"`{agent.cfg_path}`"
-    return f"{M.EMOJI['fail']} Dùng: `/config show` · `/config set <khoá> <giá trị>` · `/config path`"
+    return (
+        f"{M.EMOJI['fail']} *Lệnh cấu hình không hợp lệ*\n\n"
+        f"📝 *Cú pháp:*\n"
+        f"• Xem toàn bộ: `/config show`\n"
+        f"• Đổi giá trị: `/config set <khoá> <giá_trị>`\n"
+        f"• Vị trí file: `/config path`\n\n"
+        f"💡 _Ví dụ: `/config set notify.on_boot false`_"
+    )
 
 
 def _mask(token: str) -> str:

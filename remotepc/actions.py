@@ -157,7 +157,7 @@ def _shell(cmd: str, timeout: int = 20) -> Result:
 # --------------------------------------------------------------------------- #
 
 
-def message_box(text: str, title: str = "Thông báo từ bố/mẹ", style: str = "warn",
+def message_box(text: str, title: str = "Tao nhắc mày", style: str = "warn",
                 timeout: int = 0, topmost: bool = True, beep: bool = True) -> Result:
     """Hop thoai Windows. timeout=0 -> cho den khi bam OK."""
     text = (text or "").strip()
@@ -239,16 +239,44 @@ def overlay(text: str, title: str = "THÔNG BÁO QUAN TRỌNG", duration: int = 
 
 
 def _overlay_tk(tk, text: str, title: str, duration: int, bg: str, fg: str, font_size: int) -> Result:
+    if IS_WINDOWS:
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                import ctypes
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
     root = tk.Tk()
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    try:
-        root.attributes("-fullscreen", True)
-    except tk.TclError:
-        root.geometry("1280x720+0+0")
     root.configure(bg=bg)
-    sw = root.winfo_screenwidth() or 1280
-    sh = root.winfo_screenheight() or 720
+
+    vx, vy = 0, 0
+    sw = root.winfo_screenwidth() or 1920
+    sh = root.winfo_screenheight() or 1080
+    if IS_WINDOWS:
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            vw = u32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+            vh = u32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+            if vw and vh:
+                vx = u32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+                vy = u32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+                sw = vw
+                sh = vh
+            else:
+                sw = u32.GetSystemMetrics(0) or sw
+                sh = u32.GetSystemMetrics(1) or sh
+        except Exception:
+            pass
+
+    root.geometry(f"{sw}x{sh}+{vx}+{vy}")
+
     # Co chu theo man hinh: man hinh ngang/hoc sinh dung laptop nho van doc ro
     size = font_size or max(20, min(56, int(min(sw / 26, sh / 14))))
 
@@ -283,7 +311,7 @@ def _overlay_tk(tk, text: str, title: str, duration: int, bg: str, fg: str, font
             root.after(1000, tick, remain - 1)
         root.after(100, tick, int(duration))
     else:
-        tk.Button(frame, text="Con đã hiểu", command=close, font=("Segoe UI", int(size * 0.45)),
+        tk.Button(frame, text="Biết rồi", command=close, font=("Segoe UI", int(size * 0.45)),
                    bg="#1f1f1f", fg="#ffffff", activebackground="#333333", padx=24, pady=8,
                    relief="flat").pack(pady=(32, 0))
     root.bind("<Escape>", close)
@@ -325,7 +353,8 @@ def screenshot(path: Optional[Path] = None, quality_jpeg: int = 80) -> tuple[boo
         import mss                                     # type: ignore
         import mss.tools                               # type: ignore
 
-        with mss.mss() as sct:
+        sct_cls = getattr(mss, "MSS", mss.mss)
+        with sct_cls() as sct:
             shot = sct.grab(sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0])
             png = mss.tools.to_png(shot.rgb, shot.size)
         path.write_bytes(png)

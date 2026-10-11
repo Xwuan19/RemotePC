@@ -217,7 +217,7 @@ class TestEndToEnd(unittest.TestCase):
     def test_boot_report_reaches_bot(self):
         agent = self.make_agent()
         agent.monitor.check_boot()
-        self.assertTrue(self.server.wait_for("MÁY VỪA ĐƯỢC BẬT", timeout=8),
+        self.assertTrue(self.server.wait_for("Máy vừa được bật", timeout=8),
                         self.server.all_text())
         self.assertIn("PC-CON", self.server.all_text())
         self.assertIn("1.2.3.4", self.server.all_text())
@@ -225,7 +225,7 @@ class TestEndToEnd(unittest.TestCase):
     def test_login_report_reaches_bot(self):
         agent = self.make_agent()
         agent.monitor.check_login()
-        self.assertTrue(self.server.wait_for("CÓ NGƯỜI ĐĂNG NHẬP", timeout=8))
+        self.assertTrue(self.server.wait_for("Có người đăng nhập", timeout=8))
         self.assertIn("Kid", self.server.all_text())
 
     def test_command_roundtrip(self):
@@ -234,7 +234,7 @@ class TestEndToEnd(unittest.TestCase):
         t = threading.Thread(target=agent.start, daemon=True)
         t.start()
         try:
-            self.assertTrue(self.server.wait_for("GIỜ GIỚI NGHIÊM", timeout=12),
+            self.assertTrue(self.server.wait_for("Giờ giới nghiêm", timeout=12),
                             self.server.all_text())
             self.assertIn("PC-CON", self.server.all_text())
             self.assertIn("setMyCommands", self.server.calls)     # dang ky menu lenh
@@ -330,13 +330,13 @@ class TestEndToEnd(unittest.TestCase):
         with mock.patch.object(agent.monitor, "local_now", side_effect=lambda: fake[0]), \
              mock.patch.object(agent.monitor, "now", side_effect=lambda: fake[0].timestamp()):
             agent.monitor.check_curfew()
-            self.assertTrue(self.server.wait_for("SẮP TỚI GIỜ GIỚI NGHIÊM", timeout=8),
+            self.assertTrue(self.server.wait_for("Sắp tới giờ giới nghiêm", timeout=8),
                             self.server.all_text())
             self.assertIn("10 phút", self.server.all_text())
 
             fake[0] = datetime_now(2026, 3, 10, 23, 30, 30)
             agent.monitor.check_curfew()
-            self.assertTrue(self.server.wait_for("ĐÃ VÀO GIỜ GIỚI NGHIÊM", timeout=8),
+            self.assertTrue(self.server.wait_for("Đã vào giờ giới nghiêm", timeout=8),
                             self.server.all_text())
         self.assertTrue(actions.overlay.called or actions.message_box.called,
                         "Phai hien thong bao tren may con")

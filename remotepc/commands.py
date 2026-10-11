@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shlex
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Optional
 
 # Cac "co" (flag) duoc phep, dung de tach khoi noi dung tu do.
@@ -43,6 +44,7 @@ ALIASES: dict[str, str] = {
     "gio": "curfew", "curfew": "curfew", "gioram": "curfew",
     "may": "machines", "devices": "machines",
     "huy": "abort", "cancel": "abort",
+    "timer": "timer", "hen": "timer", "hengio": "timer", "schedule": "timer",
 }
 
 
@@ -233,3 +235,41 @@ def format_duration(seconds: float) -> str:
     if s or not parts:
         parts.append(f"{s} giay")
     return " ".join(parts)
+
+
+def parse_shutdown_spec(text: str, now: Optional[datetime] = None) -> tuple[Optional[int], str]:
+    """Phân tích thời gian hẹn giờ tắt máy:
+    - Giờ đồng hồ: '23:30', '00:00', '23h30' -> (số giây tính từ now, 'lúc 23:30')
+    - Khoảng thời gian: '30p', '1h', '45m', '90s' -> (số giây, 'sau 30 phút')
+    """
+    if now is None:
+        now = datetime.now()
+    s = str(text or "").strip().lower()
+    if not s:
+        return None, ""
+    is_clock = False
+    hh, mm = 0, 0
+    if ":" in s:
+        parts = s.split(":")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            hh, mm = int(parts[0]), int(parts[1])
+            is_clock = True
+    elif "h" in s and not s.endswith("h"):
+        parts = s.split("h")
+        if len(parts) == 2 and parts[0].isdigit() and len(parts[1]) == 2 and parts[1].isdigit():
+            hh, mm = int(parts[0]), int(parts[1])
+            is_clock = True
+
+    if is_clock and 0 <= hh <= 23 and 0 <= mm <= 59:
+        target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        diff = int((target - now).total_seconds())
+        return diff, f"lúc `{hh:02d}:{mm:02d}`"
+
+    dur = parse_duration(s)
+    if dur is not None and dur > 0:
+        target = now + timedelta(seconds=dur)
+        return dur, f"sau {format_duration(dur)} (lúc `{target.strftime('%H:%M')}`)"
+
+    return None, ""

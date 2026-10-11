@@ -163,7 +163,7 @@ class Monitor:
             extra["idle_reported"] = True
             self.store.log("idle", seconds=round(idle))
             self.notify(
-                f"\U0001F634 *CON ĐÃ RỜI MÁY*\n"
+                f"\U0001F634 *NÓ ĐÃ RỜI MÁY*\n"
                 f"Không có thao tác nào trong {int(idle // 60)} phút.\n"
                 f"Ứng dụng cuối: `{self.foreground() or '?'}`",
                 kind="idle")
@@ -250,8 +250,8 @@ class Monitor:
         self.notify(M.curfew_auto_shutdown(overtime=f"{int(elapsed_min)} phút", delay=delay),
                     kind="curfew_shutdown", photo=self._maybe_shot())
         self.do_action("popup",
-                       text=f"Máy sẽ TẮT sau {delay} giây vì con vẫn dùng máy "
-                            f"quá {limit} phút trong giờ giới nghiêm.",
+                       text=f"Máy sẽ TẮT sau {delay} giây vì mày vẫn dùng máy "
+                            f"quá {limit} phút trong giờ giới nghiêm. Tắt máy đi ngủ nhanh cho tao!",
                        title="TỰ ĐỘNG TẮT MÁY", style="error", timeout=delay, overlay=True)
         self.do_action("shutdown", delay=delay, force=True,
                        reason="Dùng máy quá giờ giới nghiêm")
@@ -282,24 +282,62 @@ class Monitor:
     # ---------------- mo ta cho /status ---------------- #
 
     def describe(self) -> str:
-        now = self.local_now()
         info = system_info.collect(with_public_ip=False)
         from .commands import format_duration
+
         lines = [
-            f"{M.EMOJI['pc']} *{info.hostname}* (`{self.cfg.machine_tag}`)",
-            f"Người dùng: `{info.user or '?'}`",
-            f"Đã bật: {format_duration(info.uptime_seconds)} (từ "
+            f"🖥 *Remote PC* • `{info.hostname}` (`{self.cfg.machine_tag}`)",
+            "─────────────",
+            "🟢 *Trạng thái:* _Online • Đang hoạt động_",
+            f"👤 *Người dùng:* `{info.user or '?'}`",
+            f"⏱ *Uptime:* `{format_duration(info.uptime_seconds)}` (từ "
             f"{datetime.fromtimestamp(info.boot_time).strftime('%H:%M %d/%m') if info.boot_time else '?'})",
-            f"Hôm nay con dùng máy: {format_duration(self.usage_today())}",
-            f"IP LAN: `{info.lan_ip or '?'}`",
-            f"RAM: {info.mem_percent:.0f}%" if info.mem_percent >= 0 else "",
-            f"Cửa sổ đang mở: `{self.foreground() or '?'}`",
-            "",
-            M.EMOJI['clock'] + " *GIỜ GIỚI NGHIÊM*",
-            ("(đang TẮT)" if not self.cfg.curfew.enabled else ""),
-            self.engine.describe(now),
+            f"⏳ *Hôm nay dùng:* `{format_duration(self.usage_today())}`",
+            f"🌐 *IP Mạng:* `{info.lan_ip or '?'}` (LAN)",
         ]
-        return "\n".join(x for x in lines if x)
+
+        if self.cfg.curfew.enabled:
+            first_w = self.engine.windows[0] if self.engine.windows else None
+            start_t = format_min(first_w.start) if first_w else "23:00"
+            lines.extend([
+                "",
+                f"⏰ *Giờ giới nghiêm (nhắc ngủ):* Sau `{start_t}` _(chỉ nhắc nhở, không tự tắt)_",
+            ])
+        else:
+            lines.extend([
+                "",
+                "⏰ *Giờ giới nghiêm (nhắc ngủ):* _(đang tắt)_",
+            ])
+
+        return "\n".join(lines).strip()
+
+    def describe_performance(self) -> str:
+        """Tạo chuỗi hiệu năng phần cứng cho /performance."""
+        info = system_info.collect(with_public_ip=False)
+        from .messages import make_bar
+
+        lines = [
+            f"📊 *Hiệu năng* • `{info.hostname}`",
+            "─────────────",
+        ]
+        if info.cpu_percent >= 0:
+            lines.append(f"▫️ *CPU:* `[{make_bar(info.cpu_percent)}]` *{info.cpu_percent:.0f}%*")
+        if info.mem_percent >= 0:
+            mem_str = f"▫️ *RAM:* `[{make_bar(info.mem_percent)}]` *{info.mem_percent:.0f}%*"
+            if info.mem_total_gb > 0:
+                mem_str += f" _({info.mem_used_gb:.1f} / {info.mem_total_gb:.1f} GB)_"
+            lines.append(mem_str)
+        if info.disk_percent >= 0:
+            disk_str = f"▫️ *Ổ C:* `[{make_bar(info.disk_percent)}]` *{info.disk_percent:.0f}%*"
+            if info.disk_free_gb > 0:
+                disk_str += f" _({info.disk_free_gb:.1f} GB trống)_"
+            lines.append(disk_str)
+        cur_fg = self.foreground()
+        if cur_fg:
+            lines.append(f"▫️ *Đang mở:* `{cur_fg}`")
+        return "\n".join(lines)
+
+
 
 
 def windows_from_config(cfg: Config) -> list[Window]:

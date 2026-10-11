@@ -148,11 +148,11 @@ class ACCESS_DENIED_ACE(ctypes.Structure):
 
 
 class ACL_SIZE_INFORMATION(ctypes.Structure):
-    """typedef struct _ACL_SIZE_INFORMATION (accapi.h) - 8 byte."""
+    """typedef struct _ACL_SIZE_INFORMATION (winnt.h) - 12 byte."""
     _fields_ = [
+        ("AceCount", DWORD),
         ("AclBytesInUse", DWORD),
-        ("AceCount", ctypes.c_uint16),
-        ("AclBytesFree", ctypes.c_uint16),
+        ("AclBytesFree", DWORD),
     ]
 
 
@@ -205,8 +205,7 @@ def protect_process(pid: int, accounts: Iterable[str] = (), take_ownership: bool
     if not accounts:
         return False, "Chong danh sach tai khoan can chan."
 
-    advapi32 = ctypes.windll.advapi32                       # type: ignore[attr-defined]
-    kernel32 = ctypes.windll.kernel32                       # type: ignore[attr-defined]
+    kernel32, advapi32 = _configured_win32()
 
     WRITE_OWNER = 0x00080000
     access = WRITE_DAC | READ_CONTROL | (WRITE_OWNER if take_ownership else 0)
@@ -224,18 +223,18 @@ def protect_process(pid: int, accounts: Iterable[str] = (), take_ownership: bool
             sys_sid = _sid_from_string(SID_SYSTEM)
             if sys_sid:
                 OWNER_SECURITY_INFORMATION = 0x00000001
-                rc = advapi32.SetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
-                                               OWNER_SECURITY_INFORMATION, ctypes.byref(sys_sid),
-                                               None, None, None)
+                rc = advapi32.SetSecurityInfo(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+                                              OWNER_SECURITY_INFORMATION, sys_sid,
+                                              None, None, None)
                 kernel32.LocalFree(sys_sid)
                 if rc != 0:
                     log.debug("Doi owner that bai rc=%s (bo qua)", rc)
 
         old_dacl = ctypes.c_void_p()
         sec_desc = ctypes.c_void_p()
-        rc = advapi32.GetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
-                                       DACL_SECURITY_INFORMATION, None, None,
-                                       ctypes.byref(old_dacl), None, ctypes.byref(sec_desc))
+        rc = advapi32.GetSecurityInfo(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+                                      DACL_SECURITY_INFORMATION, None, None,
+                                      ctypes.byref(old_dacl), None, ctypes.byref(sec_desc))
         if rc != 0:
             return False, f"GetSecurityInfo that bai (rc={rc})."
 
@@ -268,9 +267,9 @@ def protect_process(pid: int, accounts: Iterable[str] = (), take_ownership: bool
         if rc != 0:
             return False, f"SetEntriesInAcl that bai (rc={rc})."
         try:
-            rc = advapi32.SetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
-                                           DACL_SECURITY_INFORMATION, None, None,
-                                           new_dacl, None)
+            rc = advapi32.SetSecurityInfo(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+                                          DACL_SECURITY_INFORMATION, None, None,
+                                          new_dacl, None)
             if rc != 0:
                 return False, f"SetSecurityInfo that bai (rc={rc})."
             return True, f"Da chan End Task voi: {', '.join(accounts)}"
@@ -545,12 +544,18 @@ def _configured_win32() -> tuple[Any, Any]:
     kernel32.LocalFree.argtypes = [ctypes.c_void_p]
     kernel32.GetLastError.restype = DWORD
 
-    advapi32.GetSecurityInfoW.restype = DWORD
-    advapi32.GetSecurityInfoW.argtypes = [
+    advapi32.GetSecurityInfo.restype = DWORD
+    advapi32.GetSecurityInfo.argtypes = [
         ctypes.c_void_p, DWORD, DWORD,
         ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
         ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
         ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.SetSecurityInfo.restype = DWORD
+    advapi32.SetSecurityInfo.argtypes = [
+        ctypes.c_void_p, DWORD, DWORD,
+        ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_void_p, ctypes.c_void_p,
     ]
     advapi32.GetAclInformation.restype = ctypes.c_int
     advapi32.GetAclInformation.argtypes = [
@@ -601,7 +606,7 @@ def deny_aces(pid: Optional[int] = None) -> list[dict[str, Any]]:
     dacl = ctypes.c_void_p()
     sd = ctypes.c_void_p()
     try:
-        rc = advapi32.GetSecurityInfoW(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
+        rc = advapi32.GetSecurityInfo(ctypes.c_void_p(handle), SE_KERNEL_OBJECT,
                                        DACL_SECURITY_INFORMATION, None, None,
                                        ctypes.byref(dacl), None, ctypes.byref(sd))
         if rc != 0 or not dacl.value:
@@ -628,7 +633,7 @@ def deny_aces(pid: Optional[int] = None) -> list[dict[str, Any]]:
             found.append({
                 "index": i,
                 "mask": int(body.Mask),
-                "sid": _sid_text_at(advapi32, ace_ptr.value, int(body.SidStart)),
+                "sid": _sid_text_at(advapi32, ace_ptr.value, ACCESS_DENIED_ACE.SidStart.offset),
             })
         return found
     finally:

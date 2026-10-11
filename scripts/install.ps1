@@ -365,7 +365,7 @@ if ($code -eq 0) {
     Write-Host "    /status      - Xem thoi gian con dung may va app dang chay"
     Write-Host "    /screenshot  - Chup man hinh may cua con"
     Write-Host "    /msg <loi>   - Gui thong bao nhac nho len man hinh con"
-    Write-Host "    /lock        - Khoa man hinh ngay lap tuc"
+    Write-Host "    /apps        - Xem cac ung dung dang mo"
     Write-Host "    /shutdown    - Tat may con (co dem nguoc 45s)"
     Write-Host "==========================================================================" -ForegroundColor Green
 } else {

@@ -201,7 +201,7 @@ class TelegramClient:
             "getUpdates",
             offset=offset or None,
             timeout=timeout,
-            allowed_updates=allowed or ["message", "edited_message"],
+            allowed_updates=allowed or ["message", "edited_message", "callback_query"],
         )
         out = []
         for item in res or []:
@@ -239,6 +239,32 @@ class TelegramClient:
                 else:
                     raise
         return last
+
+    def edit_message_text(self, chat_id: int, message_id: int, text: str,
+                          parse_mode: Optional[str] = None,
+                          reply_markup: Optional[dict] = None) -> Optional[dict]:
+        """Sửa nội dung tin nhắn hiện tại khi người dùng bấm nút inline."""
+        if not text or not message_id:
+            return None
+        try:
+            return self.call(
+                "editMessageText",
+                attempts=2,
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text[:4000],
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+        except TelegramError as e:
+            if "not modified" in str(e).lower():
+                return None
+            if parse_mode and e.code == 400:
+                log.warning("editMessageText parse_mode loi (%s), thu gui plain text", e)
+                return self.call("editMessageText", attempts=1, chat_id=chat_id,
+                                 message_id=message_id, text=_plain(text[:4000]),
+                                 reply_markup=reply_markup)
+            raise
 
     def answer_callback_query(self, callback_query_id: str, text: str = "") -> bool:
         """Phan hoi callback query khi nguoi dung bam nut inline."""
