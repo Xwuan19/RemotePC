@@ -315,6 +315,10 @@ def _apply_acls(cfg: Config, layout: Layout, install_root: Path, children: list[
     except OSError:
         pass
 
+    # Go bo cac quyen DENY cu tren nhom Users neu da tung bi cai dat loi truoc do
+    for target in (layout.base, layout.ipc_dir, layout.outbox_dir, layout.inbox_dir, layout.shots_dir):
+        run(["icacls", str(target), "/remove:d", "*S-1-5-32-545"])
+
     # 1) Thu muc du lieu (layout.base):
     # Chi SYSTEM + Administrators giu toan quyen. Users bi loai khoi DACL (/inheritance:r).
     run(["icacls", str(layout.base), "/inheritance:r",

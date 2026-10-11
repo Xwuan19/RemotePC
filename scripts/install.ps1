@@ -59,6 +59,32 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 Write-Ok "Dang chay voi quyen Administrator ($($identity.Name))"
 
+# Tat QuickEdit Mode tren Console de tranh viec vo tinh click chuot lam dong bang tien trinh
+try {
+    $code = @'
+    using System;
+    using System.Runtime.InteropServices;
+    public class ConsoleHelper {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr GetStdHandle(int nStdHandle);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+        public static void DisableQuickEdit() {
+            IntPtr hStdin = GetStdHandle(-10);
+            if (hStdin != IntPtr.Zero && GetConsoleMode(hStdin, out uint mode)) {
+                mode &= ~0x0040u; // ENABLE_QUICK_EDIT_MODE = 0x0040
+                mode |= 0x0080u;  // ENABLE_EXTENDED_FLAGS = 0x0080
+                SetConsoleMode(hStdin, mode);
+            }
+        }
+    }
+'@
+    Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+    [ConsoleHelper]::DisableQuickEdit()
+} catch {}
+
 # --------------------------------------------------------------------------- #
 # Helper tim va cai dat Python
 # --------------------------------------------------------------------------- #
@@ -232,39 +258,43 @@ if (-not $SkipInit) {
         } catch {}
     }
 
-    if (-not $hasToken -and -not $Token -and -not $NonInteractive) {
-        Write-Host ""
-        Write-Host "==========================================================================" -ForegroundColor Cyan
-        Write-Host "  THIET LAP BOT TELEGRAM DE QUAN LY MAY CUA CON" -ForegroundColor Yellow
-        Write-Host "==========================================================================" -ForegroundColor Cyan
-        Write-Host "  De quan ly may tinh tu xa qua dien thoai, ban can 1 bot Telegram mien phi:"
-        Write-Host "    1. Mo Telegram tren dien thoai, tim @BotFather"
-        Write-Host "    2. Gui lenh /newbot va lam theo huong dan de dat ten cho bot"
-        Write-Host "    3. Copy doan HTTP API Token (vi du: 7123456789:AAHk...)"
-        Write-Host "--------------------------------------------------------------------------"
-        $Token = Read-Host "  -> Dan Bot Token vao day (hoac Enter neu muon nhap sau)"
-        $Token = $Token.Trim()
-
-        if ($Token) {
+    if ($hasToken -and -not $Token) {
+        Write-Ok "Da co san cau hinh tai $cfgPath (Bot Token da luu). Tiep tuc cai dat."
+    } else {
+        if (-not $hasToken -and -not $Token -and -not $NonInteractive) {
             Write-Host ""
-            Write-Host "  Chat ID Telegram cua bo/me:" -ForegroundColor Yellow
-            Write-Host "  (Lay nhanh bang cach nhan tin cho bot @userinfobot tren Telegram de xem Id)" -ForegroundColor Gray
-            $ChatId = Read-Host "  -> Nhap Chat ID cua ban (Enter neu muon ghep noi sau qua /pair)"
-            $ChatId = $ChatId.Trim()
+            Write-Host "==========================================================================" -ForegroundColor Cyan
+            Write-Host "  THIET LAP BOT TELEGRAM DE QUAN LY MAY CUA CON" -ForegroundColor Yellow
+            Write-Host "==========================================================================" -ForegroundColor Cyan
+            Write-Host "  De quan ly may tinh tu xa qua dien thoai, ban can 1 bot Telegram mien phi:"
+            Write-Host "    1. Mo Telegram tren dien thoai, tim @BotFather"
+            Write-Host "    2. Gui lenh /newbot va lam theo huong dan de dat ten cho bot"
+            Write-Host "    3. Copy doan HTTP API Token (vi du: 7123456789:AAHk...)"
+            Write-Host "--------------------------------------------------------------------------"
+            $Token = Read-Host "  -> Dan Bot Token vao day (hoac Enter neu muon nhap sau)"
+            $Token = $Token.Trim()
 
-            Write-Host ""
-            $Pin = Read-Host "  -> Dat ma PIN bao ve lenh tat may (Enter de dung mac dinh: 1234)"
-            $Pin = $Pin.Trim()
-            if (-not $Pin) { $Pin = "1234" }
+            if ($Token) {
+                Write-Host ""
+                Write-Host "  Chat ID Telegram cua bo/me:" -ForegroundColor Yellow
+                Write-Host "  (Lay nhanh bang cach nhan tin cho bot @userinfobot tren Telegram de xem Id)" -ForegroundColor Gray
+                $ChatId = Read-Host "  -> Nhap Chat ID cua ban (Enter neu muon ghep noi sau qua /pair)"
+                $ChatId = $ChatId.Trim()
+
+                Write-Host ""
+                $Pin = Read-Host "  -> Dat ma PIN bao ve lenh tat may (Enter de dung mac dinh: 1234)"
+                $Pin = $Pin.Trim()
+                if (-not $Pin) { $Pin = "1234" }
+            }
         }
-    }
 
-    Write-Step "Luu cau hinh agent"
-    $initArgs = @("init", "--defaults")
-    if ($Token)  { $initArgs += @("--token", $Token) }
-    if ($ChatId) { $initArgs += @("--chat-id", $ChatId) }
-    if ($Pin)    { $initArgs += @("--pin", $Pin) }
-    Invoke-RemotePC $initArgs
+        Write-Step "Luu cau hinh agent"
+        $initArgs = @("init", "--defaults")
+        if ($Token)  { $initArgs += @("--token", $Token) }
+        if ($ChatId) { $initArgs += @("--chat-id", $ChatId) }
+        if ($Pin)    { $initArgs += @("--pin", $Pin) }
+        Invoke-RemotePC $initArgs
+    }
 }
 
 # --------------------------------------------------------------------------- #

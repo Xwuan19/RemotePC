@@ -66,11 +66,11 @@ def _ask(prompt: str, default: str = "", hidden: bool = False, required: bool = 
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    print("=" * 62)
-    print(" REMOTE PC — THIẾT LẬP BAN ĐẦU")
-    print("=" * 62)
+    print("=" * 62, flush=True)
+    print(" REMOTE PC — THIẾT LẬP BAN ĐẦU", flush=True)
+    print("=" * 62, flush=True)
     cfg, cfg_path = load_config(args.config)
-    print(f"\nFile cấu hình sẽ lưu tại: {cfg_path}\n")
+    print(f"\nFile cấu hình sẽ lưu tại: {cfg_path}\n", flush=True)
 
     if getattr(args, "defaults", False):
         token = (args.token or cfg.telegram.bot_token or "").strip()
@@ -92,12 +92,12 @@ def cmd_init(args: argparse.Namespace) -> int:
             cfg.machine_id = make_machine_id()
         cfg.data_dir = str(cfg.data_layout_dir())
         save_config(cfg, cfg_path)
-        print(" ✅ Đã lưu cấu hình (chế độ tự động).")
-        print(f"    - Bot token: {'Đã cấu hình' if cfg.telegram.bot_token else 'Chưa có'}")
-        print("    - PIN: Đã đặt")
-        print(f"    - Chat Admin: {cfg.telegram.allowed_chat_ids or 'Chưa có (ghép nối sau bằng /pair <PIN>)'}")
-        print(f"    - Tag máy: {cfg.machine_tag}")
-        print("=" * 62)
+        print(" ✅ Đã lưu cấu hình (chế độ tự động).", flush=True)
+        print(f"    - Bot token: {'Đã cấu hình' if cfg.telegram.bot_token else 'Chưa có'}", flush=True)
+        print("    - PIN: Đã đặt", flush=True)
+        print(f"    - Chat Admin: {cfg.telegram.allowed_chat_ids or 'Chưa có (ghép nối sau bằng /pair <PIN>)'}", flush=True)
+        print(f"    - Tag máy: {cfg.machine_tag}", flush=True)
+        print("=" * 62, flush=True)
         return 0
 
     print("1) Tạo bot: nhắn @BotFather trên Telegram → /newbot → copy token.")
