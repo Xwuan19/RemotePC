@@ -1,0 +1,15 @@
+# RemotePC — dependencies
+#
+# LÕI: không cần cài gì cả. Toàn bộ chức năng chính dùng thư viện chuẩn của
+# Python 3.10+ (urllib, ctypes, tkinter, json...).
+#
+# Các gói dưới đây là TUỲ CHỌN:
+
+# Chụp màn hình nhanh hơn & đa màn hình (không có thì tool tự dùng PowerShell/.NET)
+mss>=9.0.1
+
+# Chỉ cần khi đóng gói thành file .exe
+pyinstaller>=6.0
+
+# Chỉ cần khi chạy test (test viết bằng unittest nên thực ra không bắt buộc)
+# pytest>=8.0

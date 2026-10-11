@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Đóng gói
+build/
+dist/
+*.spec
+*.manifest
+
+# Dữ liệu runtime / bí mật — TUYỆT ĐỐI không commit
+config.json
+!config.example.json
+*.local.json
+state.json
+events.jsonl
+agent.log
+agent.pid
+offset.dat
+watchdog.json
+ipc/
+shots/
+tasks/
+
+# Test / tooling
+test-report.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / IDE
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/

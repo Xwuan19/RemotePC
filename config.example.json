@@ -1,0 +1,79 @@
+{
+  "_doc": "Mẫu cấu hình RemotePC. Copy thành config.json (Windows: C:\\ProgramData\\SysHealthAgent\\config.json). Nên dùng `remotepc init` để tạo tự động.",
+  "machine_tag": "pc1",
+  "require_tag": false,
+  "telegram": {
+    "bot_token": "123456789:AA...token-lay-tu-BotFather...",
+    "allowed_chat_ids": [
+      111222333
+    ],
+    "poll_timeout": 45,
+    "silent_replies": false,
+    "api_base": "https://api.telegram.org",
+    "proxy": ""
+  },
+  "stealth": {
+    "display_name": "SysHealthAgent",
+    "description": "System Health Telemetry Agent",
+    "uihost_name": "SysHealthUI",
+    "level": 2,
+    "hide_console": true,
+    "deny_terminate_accounts": [],
+    "block_task_manager_for_child": true,
+    "block_regedit_for_child": true,
+    "randomize_process_title": true
+  },
+  "notify": {
+    "on_boot": true,
+    "on_login": true,
+    "on_unlock": false,
+    "on_shutdown": true,
+    "on_idle": false,
+    "idle_minutes": 30,
+    "heartbeat_minutes": 0,
+    "on_tamper": true,
+    "on_curfew": true,
+    "on_command": true,
+    "language": "vi"
+  },
+  "curfew": {
+    "enabled": true,
+    "windows": [
+      {
+        "name": "Đêm",
+        "start": "23:30",
+        "end": "00:00",
+        "days": [],
+        "warn_before_minutes": [
+          30,
+          10
+        ],
+        "on_start": "popup",
+        "on_end": "notify",
+        "popup_text": ""
+      }
+    ],
+    "repeat_cooldown_minutes": 15,
+    "screenshot_on_violation": false,
+    "auto_shutdown_after_minutes": 0,
+    "auto_shutdown_delay": 60
+  },
+  "monitoring": {
+    "track_active_window": true,
+    "window_poll_seconds": 20,
+    "track_app_usage": true,
+    "keep_events_days": 14,
+    "max_events": 5000
+  },
+  "power": {
+    "shutdown_delay": 30,
+    "force_close_apps": true,
+    "restart_delay": 30
+  },
+  "pin_hash": "",
+  "pin_salt": "",
+  "machine_id": "",
+  "installed": false,
+  "schema_version": 1,
+  "_doc_proxy": "Telegram bị nhiều nhà mạng Việt Nam chặn từ 2025. Nếu máy con không gọi được api.telegram.org, hãy bật VPN hệ thống hoặc điền proxy vào telegram.proxy, ví dụ \"http://127.0.0.1:1080\". Để trống thì tự dùng biến HTTPS_PROXY."
+}
