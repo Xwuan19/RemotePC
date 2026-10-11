@@ -54,11 +54,14 @@ class FakeTelegramServer:
                     code = outer.fail_status.get(method, 500)
                     data = json.dumps({"ok": False, "error_code": code,
                                        "description": "gia lap loi server"}).encode()
-                    self.send_response(code)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(data)))
-                    self.end_headers()
-                    self.wfile.write(data)
+                    try:
+                        self.send_response(code)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
                     return
 
                 if method == "getUpdates":
@@ -85,11 +88,14 @@ class FakeTelegramServer:
                     payload = {"ok": True, "result": True}
 
                 data = json.dumps(payload).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass        # agent da ngat ket noi (vd may "dang tat") -> bo qua
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self.httpd.server_address[1]

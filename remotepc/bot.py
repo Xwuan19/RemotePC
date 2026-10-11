@@ -28,7 +28,7 @@ from .commands import ParsedCommand, format_duration, parse_duration, parse_mess
 from .config import Config, layout_for, load_config, save_config, set_by_path
 from .curfew import format_min, parse_days, parse_hhmm
 from .monitor import Monitor
-from .paths import IS_WINDOWS, Layout, python_command_for
+from .paths import IS_WINDOWS, Layout, is_frozen, python_command_for
 from .uihost import InboxReader
 from .state import Store
 from .telegram_client import TelegramClient, TelegramError, Update
@@ -36,6 +36,7 @@ from .telegram_client import TelegramClient, TelegramError, Update
 log = logging.getLogger("remotepc.bot")
 
 MONITOR_INTERVAL = 5.0
+MONITOR_BOOT_DELAY = 8.0          # doi he thong on dinh sau khi may bat (REMOTEPC_BOOT_DELAY)
 WATCHDOG_INTERVAL = 20.0
 PROTECT_INTERVAL = 180.0
 PIN_SESSION_MINUTES = 15
@@ -118,6 +119,14 @@ class Agent:
             log.error("Chua co bot_token - chay `remotepc init` truoc.")
         if not self.cfg.telegram.allowed_chat_ids:
             log.warning("Chua cap phep chat_id nao. Gui /pair <PIN> cho bot de ghep noi.")
+        if not self.cfg.has_pin():
+            log.warning("Chua dat PIN: lenh tat may/go cai dat khong can xac thuc.")
+            self.notify(
+                f"{M.EMOJI['warn']} *CHƯA ĐẶT MÃ PIN*\n"
+                f"Máy `{self.cfg.machine_tag}` đang cho phép tắt máy / đổi giờ / gỡ tool "
+                f"mà không cần xác thực.\n"
+                f"Ai cầm được điện thoại có chat này là điều khiển được máy con.\n"
+                f"👉 Gửi `/pin <mã 4 số trở lên>` để đặt mã ngay.")
 
         self._threads = [
             threading.Thread(target=self._monitor_loop, name="monitor", daemon=True),
@@ -359,8 +368,12 @@ class Agent:
     # ================================================================== #
 
     def _monitor_loop(self) -> None:
-        # Cho he thong on dinh sau khi boot
-        self._stop.wait(8)
+        # Cho he thong on dinh sau khi boot (Windows can vai giay de co mang/user)
+        try:
+            delay = float(os.environ.get("REMOTEPC_BOOT_DELAY", MONITOR_BOOT_DELAY))
+        except ValueError:
+            delay = MONITOR_BOOT_DELAY
+        self._stop.wait(max(0.0, delay))
         while not self._stop.is_set():
             try:
                 self.monitor.tick()
@@ -523,11 +536,20 @@ class Agent:
             log.debug("Da goi scheduled task %s de khoi dong uihost", task)
             self._stop.wait(1.5)
             return True
-        # Fallback (dev / khong co task): chay truc tiep
-        cmd = python_command_for("remotepc.uihost")
+        # Fallback (dev / khong co task): tu chay uihost
+        # BAT BUOC truyen --config: neu khong, uihost se doc thu muc du lieu
+        # mac dinh va nghe nham cho (job cua guardian khong bao gio duoc xu ly).
+        if is_frozen():
+            ui_exe = Path(sys.executable).with_name(self.cfg.stealth.uihost_name + ".exe")
+            cmd = [str(ui_exe)] if ui_exe.exists() else [str(Path(sys.executable)), "uihost"]
+        else:
+            cmd = python_command_for("remotepc.uihost")
+        cmd += ["--config", str(self.cfg_path)]
         try:
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
-            env = dict(os.environ, REMOTEPC_DATA=str(self.layout.base),
+            env = dict(os.environ,
+                       REMOTEPC_CONFIG=str(self.cfg_path),
+                       REMOTEPC_DATA=str(self.layout.base),
                        REMOTEPC_NAME=self.cfg.stealth.display_name)
             subprocess.Popen(cmd, env=env, creationflags=flags,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -633,6 +655,9 @@ class Agent:
         extra = (f"\n\n\U0001F6E1️ Bảo vệ: {prot} (mức {self.cfg.stealth.level})"
                  f"\n\U0001F5A5️ UI host: {ui}"
                  f"\n\u23F1️ Agent uptime: {format_duration(time.time() - self.store.state.first_run)}")
+        if not self.cfg.has_pin():
+            extra += ("\n" + M.EMOJI['warn'] + " CHƯA ĐẶT PIN — gửi `/pin <mã>` để bảo vệ "
+                      "các lệnh tắt máy / gỡ tool")
         pend = self.store.state.pending_shutdown
         if pend and pend.get("ok"):
             left = pend.get("at", 0) + pend.get("delay", 0) - time.time()
@@ -682,9 +707,12 @@ class Agent:
             delay = parse_duration(cmd.args[0])
         if delay is None:
             delay = self.cfg.power.restart_delay if restart else self.cfg.power.shutdown_delay
-        message = cmd.text or cmd.options.get("msg") or ""
-        if message and message.split()[0].isdigit():
-            message = " ".join(message.split()[1:])
+        # Loi nhan: bo cac token dau la con so (delay) khoi phan text tu do,
+        # roi moi den --msg. Khong lam vay thi `/shutdown 45 --msg "..."` se mat loi nhan.
+        words = cmd.text.split()
+        while words and (words[0].isdigit() or parse_duration(words[0]) is not None):
+            words.pop(0)
+        message = " ".join(words) or cmd.options.get("msg") or ""
         message = message or ("Máy sẽ khởi động lại theo yêu cầu của bố/mẹ." if restart
                               else "Máy sẽ tắt theo yêu cầu của bố/mẹ.")
         ok = self.do_action("restart" if restart else "shutdown", delay=delay, message=message,

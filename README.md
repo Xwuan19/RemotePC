@@ -221,6 +221,14 @@ Gửi `/msg @all ...` để nói với tất cả các máy.
 Lệnh cần PIN có thể nhận PIN theo 2 cách: `/unlock <mã>` một lần, hoặc thêm `--pin <mã>`
 vào cuối từng lệnh.
 
+**Nếu bạn bỏ qua bước đặt PIN** thì các lệnh trên vẫn chạy mà không hỏi gì (chat của bạn
+vẫn là cổng chính). Agent sẽ **chủ động nhắn cảnh báo** về bot lúc khởi động và nhắc lại
+trong `/status`, vì rủi ro rất thực tế là con mượn được điện thoại của bạn. Đặt PIN bằng:
+
+```
+/pin 4821
+```
+
 ---
 
 ## 5. Tin nhắn bot tự gửi về
@@ -339,15 +347,27 @@ python -m remotepc watchdog -v              # chạy 1 vòng watchdog
 python -m remotepc status                   # in trạng thái ra terminal
 ```
 
-**Test** (hơn 100 test, không cần mạng, không cần Windows):
+**Test** — 159 test, chạy trong ~25 giây, không cần mạng, không cần Windows:
 
 ```bash
 python -m unittest discover -s tests -t . -v
+python -m pyflakes remotepc/*.py tests/*.py     # 0 lỗi
 ```
 
-Bao gồm cả test end-to-end chạy một **server Telegram giả lập** ngay trong máy để kiểm tra
-đường đi thật của tin nhắn, ảnh chụp màn hình (multipart), lệnh tắt máy và kịch bản
-23:20 → 23:30 của giờ giới nghiêm.
+| File | Kiểm tra gì |
+|---|---|
+| `test_curfew.py` | Khung giờ vắt qua nửa đêm, theo thứ trong tuần, mốc báo trước không bắn trùng, phục hồi đúng sau khi agent khởi động lại giữa chừng |
+| `test_commands.py` | Phân tích `/msg --full --title "..." nội dung`, alias tiếng Việt, `@tag`, `1m30` → 90s |
+| `test_monitor.py` | Báo boot/login/idle, chuỗi 23:00 → 23:30 → 00:00, tự tắt máy khi quá giờ |
+| `test_agent.py` | Từng lệnh một: PIN, ghép nối `/pair`, định tuyến sang UI host khi ở session 0 |
+| `test_ipc.py` | Hàng đợi job: ack, hết hạn, lỗi handler, job chỉ chạy một lần |
+| `test_e2e.py` | **Server Telegram giả lập** trong máy: tin nhắn, ảnh multipart, retry/429, proxy |
+| `test_process_ipc.py` | **Bật `uihost` thành process riêng** → kiểm tra guardian ↔ uihost nói chuyện được thật |
+| `test_full_stack.py` | **Bật cả agent thành process riêng** (`python -m remotepc run`) → Telegram thật → lệnh → trả lời; lệnh `shutdown` của hệ điều hành được thay bằng script giả để test không tắt máy |
+
+Hai test cuối tồn tại vì chúng đã bắt được lỗi mà test trong cùng một process
+không thấy: `--config` không được chuyển tiếp xuống tiến trình con, khiến
+UI host ngồi đọc nhầm thư mục và **mọi lệnh `/msg`, `/lock`, `/screenshot` đều treo**.
 
 **Cấu trúc mã nguồn**
 

@@ -573,15 +573,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     _utf8_stdout()
     argv = sys.argv[1:] if argv is None else list(argv)
 
-    # Khi PyInstaller dong goi, ten exe quyet dinh che do chay
-    exe_name = Path(sys.executable).name.lower() if is_frozen() else ""
-    if is_frozen() and not argv:
+    # Khi PyInstaller dong goi, ten exe quyet dinh che do chay.
+    # Van phai nhan ra khi argv da co tham so khac (vd `SysHealthUI.exe --config X`)
+    if is_frozen():
         cfg, _ = load_config(os.environ.get("REMOTEPC_CONFIG"))
-        ui = cfg.stealth.uihost_name.lower()
-        if exe_name.startswith(ui):
-            argv = ["uihost"]
-        else:
-            argv = ["run"]
+        known = {"init", "run", "uihost", "watchdog", "notify-shutdown", "notify-boot",
+                 "send", "install", "uninstall", "doctor", "status", "config",
+                 "set-pin", "popup", "find-chat", "build"}
+        if not any(a in known for a in argv):
+            exe_name = Path(sys.executable).name.lower()
+            mode = "uihost" if exe_name.startswith(cfg.stealth.uihost_name.lower()) else "run"
+            argv = [mode] + argv
 
     parser = build_parser()
     args = parser.parse_args(argv)
