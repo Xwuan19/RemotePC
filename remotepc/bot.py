@@ -76,7 +76,8 @@ class Agent:
         self.tg: Optional[TelegramClient] = None
         try:
             self.tg = TelegramClient(cfg.telegram.bot_token, api_base=cfg.telegram.api_base,
-                                     timeout=cfg.telegram.poll_timeout + 15)
+                                     timeout=cfg.telegram.poll_timeout + 15,
+                                     proxy=cfg.telegram.proxy or None)
         except ValueError as e:
             log.warning("Chua cau hinh bot token: %s", e)
         self.queue = ipc.JobQueue(layout)
@@ -811,7 +812,8 @@ class Agent:
         self.monitor.reload_config(cfg)
         if cfg.telegram.bot_token != old_token:
             try:
-                self.tg = TelegramClient(cfg.telegram.bot_token, api_base=cfg.telegram.api_base)
+                self.tg = TelegramClient(cfg.telegram.bot_token, api_base=cfg.telegram.api_base,
+                                         proxy=cfg.telegram.proxy or None)
             except ValueError:
                 self.tg = None
         return M.cmd_ok("RELOAD", f"Đã nạp lại `{path}`.\n" + self.monitor.describe())

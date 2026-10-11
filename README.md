@@ -74,7 +74,7 @@ Vì sao phải tách 2 tiến trình? Windows **cô lập session**: một tiế
 | Chặn agent tự khởi động (msconfig / Startup) | ❌ Agent khởi động bằng **Scheduled Task** (BootTrigger + LogonTrigger), không nằm trong mục Startup |
 | Đổi giờ máy để lách giờ giới nghiêm | ⚠️ Vẫn bị phát hiện: mốc cảnh báo đã bắn sẽ không bắn lại, và bố/mẹ có thể xem uptime/giờ máy qua `/status` |
 | Giết UI host để không thấy thông báo | ⚠️ Được, nhưng watchdog bật lại sau ≤60s và **bố/mẹ nhận cảnh báo can thiệp** |
-| Vào Safe Mode | ⚠️ Task không chạy ở Safe Mode. Đây là giới hạn của mọi phần mềm dạng này (xem mục 8) |
+| Vào Safe Mode | ⚠️ Task không chạy ở Safe Mode. Đây là giới hạn của mọi phần mềm dạng này (xem mục 9) |
 | Nhìn thấy tiến trình trong Task Manager | ✅ **Có** — muốn ẩn hoàn toàn phải có driver kernel. Tool đi theo hướng *"nhìn thấy nhưng không tắt được"* |
 
 **3 mức bảo vệ** (`stealth.level` trong `config.json`, hoặc `install --level N`):
@@ -280,7 +280,53 @@ rồi chạy lại `install`. Tên này được dùng cho tiến trình, thư m
 
 ---
 
-## 7. Chạy thử / phát triển
+## 7. ⚠️ Telegram bị chặn ở Việt Nam — bắt buộc phải đọc
+
+Từ giữa 2025 các nhà mạng Việt Nam **chặn Telegram**. Agent nói chuyện với
+`api.telegram.org` qua cổng 443, nên nếu máy con không tới được Telegram thì
+**mọi thông báo đều không gửi đi được** (giờ giới nghiêm vẫn tính đúng trong máy,
+nhưng bố/mẹ không nhận tin và không ra lệnh được).
+
+Ba cách xử lý, chọn một:
+
+**Cách 1 — VPN hệ thống trên máy con (đơn giản nhất)**
+
+Cài một VPN cho *toàn hệ thống* (không phải chỉ trong trình duyệt):
+`Settings → Network & Internet → VPN → Add a VPN connection`, hoặc dùng client
+của nhà cung cấp. Agent sẽ tự đi qua VPN vì nó dùng kết nối hệ thống.
+
+**Cách 2 — Khai báo proxy cho agent (khuyên dùng nếu bạn đã có v2rayN/Clash)**
+
+```jsonc
+// C:\ProgramData\SysHealthAgent\config.json
+"telegram": {
+  "bot_token": "...",
+  "proxy": "http://127.0.0.1:1080"     // cổng SOCKS/HTTP local của client VPN
+}
+```
+
+hoặc đặt biến môi trường `HTTPS_PROXY` cho tài khoản SYSTEM. Xong thì nhắn
+`/reload` cho bot (hoặc `remotepc run --once` để thử). Bước `init` cũng hỏi
+mục này ngay từ đầu.
+
+**Cách 3 — Chạy agent trên một máy/VPS không bị chặn**
+
+Vì logic nằm trong máy con nên cách này không áp dụng trực tiếp được; nếu bạn
+có VPS ở nước ngoài, hãy cho VPN của máy con kết nối ra VPS đó.
+
+Kiểm tra kết nối từ máy con:
+
+```bat
+curl -I https://api.telegram.org
+:: hoặc
+python -m remotepc send "test ket noi"
+```
+
+Nếu `send` báo ✅ thì agent hoạt động được.
+
+---
+
+## 8. Chạy thử / phát triển
 
 ```bash
 python -m remotepc init                     # wizard tạo config
@@ -328,7 +374,7 @@ remotepc/
 
 ---
 
-## 8. Giới hạn cần biết (nói thẳng)
+## 9. Giới hạn cần biết (nói thẳng)
 
 1. **Tiến trình vẫn hiện trong Task Manager.** Ẩn hoàn toàn cần driver kernel — đó là lãnh địa
    của rootkit, và tool này không làm vậy. Mục tiêu là *không tắt được*, không phải *không thấy được*.
@@ -347,7 +393,7 @@ remotepc/
 
 ---
 
-## 9. Gỡ cài đặt & khôi phục
+## 10. Gỡ cài đặt & khôi phục
 
 ```bat
 :: Cách 1: từ Telegram
@@ -378,6 +424,7 @@ Lỗi thường gặp:
 | Triệu chứng | Nguyên nhân / cách sửa |
 |---|---|
 | Bot im lặng hoàn toàn | Sai token, hoặc chưa có `chat_id`. Chạy `remotepc find-chat --add` hoặc gửi `/pair <PIN>` |
+| `urlopen error` / không gửi được tin nào | **Telegram bị chặn.** Xem mục 7 — bật VPN hoặc đặt `telegram.proxy` |
 | `409 Conflict` | Một tiến trình khác đang dùng cùng token (vd bạn chạy thử 2 máy). Dừng bớt |
 | `/msg` báo thất bại nhưng `/shutdown` vẫn được | UI host chưa chạy → `/uihost restart`, hoặc `schtasks /run /tn "SysHealthAgent UI"` |
 | `/screenshot` ra ảnh đen | Máy đang ở màn hình khoá — Windows không cho chụp desktop đang khoá |
@@ -386,7 +433,7 @@ Lỗi thường gặp:
 
 ---
 
-## 10. Vài lời cuối
+## 11. Vài lời cuối
 
 Tool này hiệu quả nhất khi **nói trước với con** rằng máy tính có giờ giới nghiêm và bố/mẹ
 có thể tắt máy từ xa. Phần "nguy trang" là để con *không tắt được* quy tắc, không phải để

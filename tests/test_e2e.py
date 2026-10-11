@@ -10,6 +10,7 @@ Khong can mang, khong can token that.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import time
@@ -384,6 +385,30 @@ class TestTelegramClientRetry(unittest.TestCase):
             with self.assertRaises(TelegramError):
                 self.tg.send_message(111, "test")
         self.assertTrue(any(c.args[0] for c in slp.call_args_list), "Phai co cho khi bi 429")
+
+
+class TestProxyConfig(unittest.TestCase):
+    """Proxy phai duoc truyen xuong urllib (Telegram bi chan o nhieu noi)."""
+
+    def test_client_uses_given_proxy(self):
+        from remotepc.telegram_client import TelegramClient
+        tg = TelegramClient("1:fake", proxy="http://127.0.0.1:1080")
+        self.assertEqual(tg.proxy, "http://127.0.0.1:1080")
+        opener = tg._opener()
+        handlers = [type(h).__name__ for h in opener.handlers]
+        self.assertIn("ProxyHandler", handlers)
+
+    def test_client_falls_back_to_env(self):
+        from remotepc.telegram_client import TelegramClient
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://env-proxy:8080"}, clear=False):
+            tg = TelegramClient("1:fake")
+        self.assertEqual(tg.proxy, "http://env-proxy:8080")
+
+    def test_explicit_proxy_wins_over_env(self):
+        from remotepc.telegram_client import TelegramClient
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://env-proxy:8080"}, clear=False):
+            tg = TelegramClient("1:fake", proxy="http://mine:1080")
+        self.assertEqual(tg.proxy, "http://mine:1080")
 
 
 def datetime_now(*a):

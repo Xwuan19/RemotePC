@@ -84,12 +84,21 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     if cfg.telegram.bot_token:
         from .telegram_client import TelegramClient, TelegramError
+        proxy = _ask("Proxy/VPN nếu Telegram bị chặn (bỏ trống nếu không dùng)",
+                     cfg.telegram.proxy or "")
+        cfg.telegram.proxy = proxy.strip()
         try:
-            me = TelegramClient(cfg.telegram.bot_token).me(force=True)
+            me = TelegramClient(cfg.telegram.bot_token,
+                                proxy=cfg.telegram.proxy or None).me(force=True)
             print(f"   ✅ Bot hoạt động: @{me.get('username')} ({me.get('first_name')})")
         except TelegramError as e:
-            print(f"   ❌ Token sai: {e}")
-            return 2
+            if e.code in (401, 404):
+                print(f"   ❌ Token sai hoặc bot đã bị xoá: {e}")
+                return 2
+            # Khong ket noi duoc (mat mang / Telegram bi chan) -> van luu, sua sau
+            print(f"   ⚠️ Chưa kiểm tra được token: {e}")
+            print("      Vẫn lưu cấu hình. Nếu bạn ở nơi chặn Telegram, hãy cài VPN")
+            print("      hoặc đặt `telegram.proxy` trong config.json rồi chạy `/reload`.")
 
     print("\n2) Cấp quyền chat: bố/mẹ hãy nhắn bất kỳ tin nào cho bot, rồi Enter.")
     if args.chat_id:
@@ -230,7 +239,7 @@ def cmd_notify_shutdown(args: argparse.Namespace) -> int:
                              at=f"{datetime.now():%H:%M:%S %d/%m/%Y}")
     try:
         # Windows chi cho task chay vai giay trong luc dang tat -> gui nhanh, khong retry
-        tg = TelegramClient(cfg.telegram.bot_token, timeout=8)
+        tg = TelegramClient(cfg.telegram.bot_token, timeout=8, proxy=cfg.telegram.proxy or None)
         for chat in cfg.telegram.allowed_chat_ids:
             tg.send_message(chat, text, parse_mode="Markdown", quick=True)
     except TelegramError as e:
@@ -258,7 +267,8 @@ def _broadcast(cfg: Config, text: str, quick: bool = False) -> int:
         print("❌ Chưa cấp phép chat_id nào. Chạy `remotepc init` hoặc gửi `/pair <PIN>` cho bot.")
         return 2
     try:
-        tg = TelegramClient(cfg.telegram.bot_token, timeout=10 if quick else 60)
+        tg = TelegramClient(cfg.telegram.bot_token, timeout=10 if quick else 60,
+                            proxy=cfg.telegram.proxy or None)
         for chat in cfg.telegram.allowed_chat_ids:
             tg.send_message(chat, text, parse_mode="Markdown", quick=quick)
         print("✅ Đã gửi.")

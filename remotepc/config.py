@@ -39,6 +39,10 @@ class TelegramConfig:
     # Tra loi im lang (khong hien thong bao " dang viet...")
     silent_replies: bool = False
     api_base: str = "https://api.telegram.org"
+    # Di qua proxy/VPN. Can thiet o nhung noi chan Telegram (vd Viet Nam tu 2025).
+    # Vi du: "http://127.0.0.1:1080" (v2rayN/Clash) hoac "socks5://127.0.0.1:1080"
+    # De trong = tu lay bien moi truong HTTPS_PROXY / https_proxy.
+    proxy: str = ""
 
 
 @dataclass

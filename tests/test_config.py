@@ -58,6 +58,16 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(cfg2.is_allowed_chat(222))
         self.assertFalse(cfg2.is_allowed_chat(333))
 
+    def test_proxy_option(self):
+        """Telegram bi chan o VN -> can cau hinh duoc proxy."""
+        cfg = Config()
+        self.assertEqual(cfg.telegram.proxy, "")
+        p = self.dir / "config.json"
+        cfg.telegram.proxy = "http://127.0.0.1:1080"
+        save_config(cfg, p)
+        cfg2, _ = load_config(p)
+        self.assertEqual(cfg2.telegram.proxy, "http://127.0.0.1:1080")
+
     def test_unknown_keys_ignored(self):
         """Nguoi dung them chu thich `_doc` / key la -> khong duoc crash."""
         p = self.dir / "config.json"
