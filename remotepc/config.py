@@ -335,7 +335,7 @@ def save_config(cfg: Config, path: str | os.PathLike) -> Path:
                 os.unlink(tmp)
             except OSError:
                 pass
-    if IS_WINDOWS:
+    if IS_WINDOWS and cfg.installed:
         try:
             from .stealth import lock_down_path  # import tre de tranh vong lap
             lock_down_path(p)

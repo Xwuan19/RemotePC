@@ -129,11 +129,13 @@ class UIHost:
         if now - self._last_fg >= FOREGROUND_INTERVAL:
             self._last_fg = now
             win = system_info.get_active_window()
-            if win and (win.title or win.process):
-                self._write_inbox("foreground.json", {
-                    "title": win.title, "process": win.process, "pid": win.pid, "ts": now,
-                    "idle": round(system_info.idle_seconds(), 1),
-                })
+            self._write_inbox("foreground.json", {
+                "title": (win.title if win else "") or "",
+                "process": (win.process if win else "") or "",
+                "pid": (win.pid if win else 0) or 0,
+                "ts": now,
+                "idle": round(system_info.idle_seconds(), 1),
+            })
 
     def run(self, once: bool = False) -> int:
         self.layout.ensure()
